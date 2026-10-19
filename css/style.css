@@ -412,3 +412,45 @@ body.mode-desktop .meter.low .mi { animation: none; }
 .about-txt { margin: 0; line-height: 1.5; }
 .dcard-body { overflow-x: hidden; }
 .row > .btn { min-width: 0; white-space: normal; text-align: center; }
+
+/* ---------- fondos del cuarto ---------- */
+.bgsky, .bgground, .bgstars { position: absolute; left: 0; right: 0; display: none; pointer-events: none; }
+.bgsky { top: 0; bottom: var(--floor); transition: filter .8s; }
+.bgground { bottom: 0; height: var(--floor); transition: filter .8s; }
+.bgsky svg, .bgground svg { width: 100%; height: 100%; display: block; }
+.scene:not([data-bg="cuarto"]) .bgsky, .scene:not([data-bg="cuarto"]) .bgground { display: block; }
+.scene:not([data-bg="cuarto"]) :is(.wall, .window, .frame, .lamp, .floor, .rug) { display: none; }
+.scene:not([data-bg="cuarto"]) .bgground { box-shadow: inset 0 6px 8px -6px rgba(0, 0, 0, .25); }
+/* afuera se hace de noche de verdad; adentro (castillo) sólo baja un poco la luz */
+.scene.outdoor[data-sky="dusk"] .bgsky { filter: sepia(.35) saturate(1.3) hue-rotate(-12deg) brightness(.9); }
+.scene.outdoor[data-sky="dusk"] .bgground { filter: brightness(.85) sepia(.15); }
+.scene.outdoor[data-sky="night"] .bgsky { filter: brightness(.38) saturate(.6) hue-rotate(25deg); }
+.scene.outdoor[data-sky="night"] .bgground { filter: brightness(.55) saturate(.7); }
+.scene.outdoor[data-sky="night"] .bgstars { display: block; top: 0; bottom: calc(var(--floor) + 25%); background:
+  radial-gradient(circle at 12% 20%, #fff 1.5px, transparent 2px), radial-gradient(circle at 30% 60%, #fff 1px, transparent 1.6px),
+  radial-gradient(circle at 46% 14%, #fff 1.4px, transparent 2px), radial-gradient(circle at 64% 42%, #fff 1px, transparent 1.6px),
+  radial-gradient(circle at 78% 18%, #fff 1.6px, transparent 2.2px), radial-gradient(circle at 90% 55%, #fff 1px, transparent 1.6px),
+  radial-gradient(circle at 22% 80%, #fff 1px, transparent 1.6px), radial-gradient(circle at 56% 74%, #fff 1.2px, transparent 1.8px); opacity: .85; }
+.scene[data-bg="castillo"][data-sky="night"] .bgsky, .scene[data-bg="castillo"][data-sky="night"] .bgground { filter: brightness(.8); }
+
+.bg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.bg-card { display: grid; gap: 4px; background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 8px; text-align: center; }
+.bg-card.on { border-color: var(--plum); box-shadow: 0 0 0 2px var(--plum) inset; }
+.bg-card b { font-family: var(--f-display); font-size: .98rem; }
+.bg-card small { color: var(--ink-soft); font-size: .76rem; line-height: 1.2; min-height: 2.4em; }
+.bg-card .btn { justify-self: stretch; }
+.bg-thumb { position: relative; display: block; aspect-ratio: 1 / .82; border-radius: 10px; overflow: hidden; background: #ddd; }
+.bg-thumb > svg { width: 100%; height: 100%; display: block; }
+.bg-thumb .bgt-sky { position: absolute; left: 0; right: 0; top: 0; height: 70%; }
+.bg-thumb .bgt-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; }
+.bg-thumb .bgt-sky svg, .bg-thumb .bgt-ground svg { width: 100%; height: 100%; display: block; }
+.bg-card.locked .bg-thumb > :not(.bg-lock) { filter: saturate(.55) brightness(.92); }
+.bg-lock { position: absolute; right: 6px; top: 6px; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: rgba(255, 255, 255, .92); color: var(--ink); }
+.bg-lock svg { width: 16px; height: 16px; }
+.bgsky .tsun { transition: opacity .6s; }
+.scene.outdoor[data-sky="night"] .bgsky .tsun { opacity: 0; }
+.bgmoon { position: absolute; display: none; top: 9%; right: 12%; width: 13%; max-width: 64px; aspect-ratio: 1; border-radius: 50%; box-shadow: -10px 5px 0 0 #fff5c8; pointer-events: none; }
+.scene.outdoor[data-sky="night"] .bgmoon { display: block; }
+/* el volcán ilumina su propia noche */
+.scene[data-bg="volcan"][data-sky="night"] .bgsky { filter: brightness(.6) saturate(.9) hue-rotate(-8deg); }
+.scene[data-bg="volcan"][data-sky="night"] .bgground { filter: brightness(.75); }

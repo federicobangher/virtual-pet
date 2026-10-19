@@ -1,9 +1,9 @@
 /* Virtual Pet — service worker: guarda el juego para que funcione sin internet. */
-const VERSION = 'vpet-v1.6.0';
+const VERSION = 'vpet-v1.7.0';
 const FILES = [
   './', './index.html', './manifest.webmanifest',
   './css/pet.css', './css/style.css',
-  './js/art.js', './js/core.js', './js/sound.js', './js/ui.js', './js/games.js', './js/room.js', './js/desktop.js', './js/boot.js',
+  './js/art.js', './js/core.js', './js/sound.js', './js/ui.js', './js/games.js', './js/themes.js', './js/room.js', './js/desktop.js', './js/boot.js',
   './fonts/grandstander-latin-800-normal.woff2', './fonts/nunito-latin-600-normal.woff2', './fonts/nunito-latin-800-normal.woff2',
   './icons/icon-192.png', './icons/icon-256.png', './icons/icon-512.png', './icons/maskable-512.png',
 ];

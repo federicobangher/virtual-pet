@@ -3,7 +3,7 @@
   'use strict';
   const N = (window.N = window.N || {});
   const MIN = 60e3, HOUR = 3600e3, DAY = 24 * HOUR;
-  N.APP = { name: 'Virtual Pet', version: '1.6.0', author: 'Facundo Bangher' };
+  N.APP = { name: 'Virtual Pet', version: '1.7.0', author: 'Facundo Bangher' };
 
   const SPECIES = {
     dragon: { name: 'Dragón', fav: 'Carne asada', egg: 'Huevo escamado', hint: 'Comilón: le da hambre seguido' },
@@ -40,10 +40,21 @@
     { id: 'gamer', name: 'Jugador', desc: 'Jugá 25 partidas', coins: 30, test: (s) => s.stats.games >= 25 },
     { id: 'style', name: 'Con estilo', desc: 'Comprá un accesorio', coins: 10, test: (s) => Object.keys(s.owned).length >= 1 },
     { id: 'collector', name: 'Coleccionista', desc: 'Comprá todos los accesorios', coins: 100, test: (s) => Object.keys(ITEMS).filter((k) => ITEMS[k].kind === 'wear').every((k) => s.owned[k]) },
+    { id: 'decor', name: 'Decorador', desc: 'Desbloqueá todos los fondos del cuarto', coins: 100, roomOnly: true, test: (s) => Object.keys(BACKGROUNDS).every((k) => s.bgOwned && s.bgOwned[k]) },
     { id: 'zoo', name: 'Zoológico', desc: 'Criá las 4 especies', coins: 100, test: (s) => Object.keys(s.stats.species).length >= 4 },
   ];
   const isNight = (t) => { const h = new Date(t).getHours(); return h >= 22 || h < 7; };
 
+  /* Fondos del cuarto (celular). El primero es gratis; los demás se desbloquean con monedas. */
+  const BACKGROUNDS = {
+    cuarto: { name: 'Cuarto', price: 0, desc: 'Su habitación de siempre.' },
+    jardin: { name: 'Jardín', price: 60, desc: 'Pasto, flores y sol.', outdoor: true },
+    playa: { name: 'Playa', price: 90, desc: 'Arena, mar y un velerito.', outdoor: true },
+    bosque: { name: 'Bosque', price: 90, desc: 'Pinos, hojas y hongos.', outdoor: true },
+    castillo: { name: 'Castillo', price: 150, desc: 'Antorchas y alfombra roja.' },
+    volcan: { name: 'Volcán', price: 150, desc: 'Ideal para un dragón.', outdoor: true },
+    espacio: { name: 'Espacio', price: 200, desc: 'Entre planetas y estrellas.' },
+  };
   const ITEMS = {
     fruit: { name: 'Fruta', price: 5, kind: 'food', food: 18, health: 2, desc: 'Llena un poco y es sana.' },
     fav: { name: 'Su comida favorita', price: 12, kind: 'food', food: 35, fun: 10, desc: 'Llena mucho y lo pone contento.' },
@@ -87,7 +98,7 @@
   /* --------- estado --------- */
   function freshState() {
     return {
-      v: 1, coins: R.startCoins, inv: Object.assign({}, R.startInv), owned: {}, wearing: null,
+      v: 1, coins: R.startCoins, inv: Object.assign({}, R.startInv), owned: {}, wearing: null, bgOwned: { cuarto: true }, bg: 'cuarto',
       daily: { last: null, streak: 0 }, pet: null, lockUntil: 0, memorial: [],
       settings: { sound: true, follow: false, notify: true, wander: true, onTop: true },
       lastSeen: now(), totalGames: 0,
@@ -134,6 +145,8 @@
     st.album = Array.isArray(st.album) ? st.album : [];
     st.inv = st.inv || {}; st.owned = st.owned || {}; st.memorial = st.memorial || [];
     st.daily = st.daily || { last: null, streak: 0 };
+    st.bgOwned = Object.assign({ cuarto: true }, st.bgOwned || {});
+    if (!BACKGROUNDS[st.bg] || !st.bgOwned[st.bg]) st.bg = 'cuarto';
     const p = st.pet;
     if (p) {
       if (p.level == null) { p.level = p.stage === 'adult' ? R.lvAdult : p.stage === 'young' ? R.lvYoung : 0; p.xp = 0; p.lastPetXP = 0; }
@@ -589,6 +602,21 @@
       S.wearing = S.wearing === itemId ? null : itemId;
       return done(ok(''));
     },
+    // Fondos: comprar uno lo deja puesto; elegir uno que ya es tuyo es gratis
+    buyBg(id) {
+      const b = BACKGROUNDS[id];
+      if (!b) return no('');
+      if (S.bgOwned[id]) return no('Ya lo tenés.');
+      if (S.coins < b.price) return no('No te alcanzan las monedas.');
+      S.coins -= b.price;
+      S.bgOwned[id] = true; S.bg = id;
+      return done(ok('¡Fondo nuevo!'));
+    },
+    setBg(id) {
+      if (!BACKGROUNDS[id] || !S.bgOwned[id]) return no('');
+      S.bg = id;
+      return done(ok(''));
+    },
     rename(name) {
       if (!S.pet) return no('');
       const n = (name || '').trim().slice(0, 16);
@@ -649,7 +677,7 @@
   }
 
   N.core = {
-    SPECIES, ITEMS, R, HOUR, MIN, DAY,
+    SPECIES, ITEMS, BACKGROUNDS, R, HOUR, MIN, DAY,
     load, save, resume, tick, advance, step, claimDaily, dailyPending,
     mood, needs, ageText, xpNeed, addXP, isNight, exportState, importState, ACHIEVEMENTS, TRAITS, checkAchievements, stageName, careAvg, isLocked, dayKey, newPet, freshState,
     get state() { return S; },

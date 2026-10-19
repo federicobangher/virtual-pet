@@ -586,6 +586,8 @@
 
   /* ---------------- íconos de interfaz ---------------- */
   const IC = {
+    image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
+    lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
     food: '<path d="M7 3v8a3 3 0 0 0 6 0V3M10 3v18M18 3c-2 0-3 3-3 7s1 4 3 4v7" />',
     play: '<circle cx="12" cy="12" r="8"/><path d="M4.5 9.5c4 1.5 11 1.5 15 0M4.5 14.5c4-1.5 11-1.5 15 0M12 4c-2 3-2 13 0 16"/>',
     bath: '<circle cx="8" cy="8" r="3"/><circle cx="16" cy="6" r="2"/><circle cx="15" cy="13" r="4"/><circle cx="7" cy="16" r="2.5"/>',

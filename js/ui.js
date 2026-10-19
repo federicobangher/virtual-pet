@@ -359,6 +359,31 @@
     return `<div class="item"><span class="item-art">${art.itemSVG(id, sp)}</span><span class="item-txt"><b>${esc(name)}</b><small>${esc(it.desc)}</small>${q}</span>${btn}</div>`;
   }
 
+  /* Fondos del cuarto: tarjetas con miniatura. Sólo en el modo cuarto (celular / navegador). */
+  function bgGrid() {
+    const S = C.state;
+    return '<div class="bg-grid">' + Object.keys(C.BACKGROUNDS).map((id) => {
+      const b = C.BACKGROUNDS[id], mine = S.bgOwned[id], on = S.bg === id;
+      const btn = on ? '<button type="button" class="btn" disabled>En uso</button>'
+        : mine ? `<button type="button" class="btn primary" data-bg="${id}">Usar</button>`
+        : `<button type="button" class="btn" data-buybg="${id}" ${S.coins < b.price ? 'disabled' : ''}>${b.price}${coinIc()}</button>`;
+      return `<div class="bg-card ${on ? 'on' : ''} ${mine ? '' : 'locked'}"><span class="bg-thumb" aria-hidden="true">${N.themes.thumb(id)}${mine ? '' : `<span class="bg-lock">${ic('lock')}</span>`}</span><b>${esc(b.name)}</b><small>${b.price ? esc(b.desc) : 'Gratis'}</small>${btn}</div>`;
+    }).join('') + '</div>';
+  }
+  function bindBg(node, after) {
+    node.addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.buybg) {
+        snd.unlock();
+        const r = C.act.buyBg(b.dataset.buybg);
+        if (r.ok) { snd.play('coin'); say('¡Qué lindo lugar!'); } else { snd.play('bad'); say(r.msg, true); }
+      } else if (b.dataset.bg) {
+        snd.unlock(); C.act.setBg(b.dataset.bg); snd.play('tap');
+      } else return;
+      after && after();
+    });
+  }
+
   function bindItems(node, after) {
     node.addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b) return;
@@ -400,9 +425,10 @@
         node.innerHTML = `<p class="note">Tenés <b>${C.state.coins}</b>${coinIc()} — ganás más jugando y entrando todos los días.</p>` +
           '<h4>Comida</h4>' + ['fruit', 'fav', 'cake'].map((id) => itemRow(id, 'shop')).join('') +
           '<h4>Salud</h4>' + ['medicine', 'vitamins'].map((id) => itemRow(id, 'shop')).join('') +
-          '<h4>Accesorios</h4>' + ['bow', 'scarf', 'hat', 'glasses', 'crown'].map((id) => itemRow(id, 'shop')).join('');
+          '<h4>Accesorios</h4>' + ['bow', 'scarf', 'hat', 'glasses', 'crown'].map((id) => itemRow(id, 'shop')).join('') +
+          (host().kind === 'room' ? `<h4>${ic('image')} Fondos</h4>` + bgGrid() : '');
       };
-      render(); bindItems(node, render);
+      render(); bindItems(node, render); bindBg(node, render);
       return { title: 'Tienda', node, refresh: render };
     },
     games() {
@@ -426,9 +452,11 @@
         const S = C.state, st = S.settings, p = S.pet;
         const owned = Object.keys(S.owned);
         const nAch = Object.keys(S.achievements).length;
+        const totAch = C.ACHIEVEMENTS.filter((a) => !(desk && a.roomOnly)).length;
         node.innerHTML = `
-          <section class="row more-top"><button type="button" class="btn" data-open="achievements">${ic('star')} Logros <span class="cnt">${nAch}/${C.ACHIEVEMENTS.length}</span></button><button type="button" class="btn" data-open="album">${ic('book')} Álbum <span class="cnt">${S.album.length}</span></button></section>
+          <section class="row more-top"><button type="button" class="btn" data-open="achievements">${ic('star')} Logros <span class="cnt">${Math.min(nAch, totAch)}/${totAch}</span></button><button type="button" class="btn" data-open="album">${ic('book')} Álbum <span class="cnt">${S.album.length}</span></button></section>
           ${p && !p.dead ? `<section><h4>${ic('pencil')} Nombre</h4><form class="rename"><input id="rename" maxlength="16" value="${esc(p.name)}" aria-label="Nombre de la mascota"><button class="btn" type="submit">Cambiar</button></form></section>` : ''}
+          ${desk ? '' : `<section class="bg-sec"><h4>${ic('image')} Fondo del cuarto</h4>${bgGrid()}</section>`}
           <section><h4>${ic('shirt')} Accesorios</h4>${owned.length ? '<div class="list">' + owned.map((id) => itemRow(id, 'shop')).join('') + '</div>' : '<p class="note">Todavía no compraste accesorios. Están en la tienda.</p>'}</section>
           <section><h4>${ic('gear')} Ajustes</h4>
             ${toggle('sound', 'Sonido', st.sound)}
@@ -492,7 +520,7 @@
           if (r.ok) snd.play('happy');
         }
       });
-      bindItems(node, render);
+      bindItems(node, render); bindBg(node, render);
       return { title: 'Más', node, refresh: () => { if (!node.contains(document.activeElement)) render(); } };
     },
   };
@@ -517,7 +545,7 @@
     const render = () => {
       const got = C.state.achievements;
       node.innerHTML = `<p class="note">${Object.keys(got).length} de ${C.ACHIEVEMENTS.length} logros. Cada logro da monedas.</p>` +
-        C.ACHIEVEMENTS.map((a) => `<div class="ach ${got[a.id] ? 'on' : ''}"><span class="ach-ic">${ic(got[a.id] ? 'star' : 'help')}</span><span class="ach-txt"><b>${esc(a.name)}</b><small>${esc(a.desc)}</small></span><span class="ach-prize">${got[a.id] ? new Date(got[a.id]).toLocaleDateString() : '+' + a.coins + coinIc()}</span></div>`).join('');
+        C.ACHIEVEMENTS.filter((a) => got[a.id] || !(a.roomOnly && host().kind === 'desktop')).map((a) => `<div class="ach ${got[a.id] ? 'on' : ''}"><span class="ach-ic">${ic(got[a.id] ? 'star' : 'help')}</span><span class="ach-txt"><b>${esc(a.name)}</b><small>${esc(a.desc)}</small></span><span class="ach-prize">${got[a.id] ? new Date(got[a.id]).toLocaleDateString() : '+' + a.coins + coinIc()}</span></div>`).join('');
     };
     render();
     return { title: 'Logros', node, refresh: render };

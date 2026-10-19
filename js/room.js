@@ -28,6 +28,9 @@
           <div class="lamp" aria-hidden="true"><span class="cord"></span><span class="shade"></span><span class="glow"></span></div>
           <div class="floor" aria-hidden="true"></div>
           <div class="rug" aria-hidden="true"></div>
+          <div class="bgsky" aria-hidden="true"></div>
+          <div class="bgground" aria-hidden="true"></div>
+          <div class="bgstars" aria-hidden="true"></div><span class="bgmoon" aria-hidden="true"></span>
           <div class="poops"></div>
           <div class="nest" hidden>${NEST}</div>
           <div class="petbox"><button type="button" class="petsvg" aria-label="Acariciar a tu mascota"></button><div class="bubble" hidden></div></div>
@@ -40,7 +43,7 @@
       <div class="modal-wrap" hidden><div class="modal-box" role="dialog" aria-modal="true"></div></div>`;
     E = {
       scene: app.querySelector('.scene'), petbox: app.querySelector('.petbox'), petsvg: app.querySelector('.petsvg'),
-      bubble: app.querySelector('.bubble'), poops: app.querySelector('.poops'), nest: app.querySelector('.nest'),
+      bubble: app.querySelector('.bubble'), bgsky: app.querySelector('.bgsky'), bgground: app.querySelector('.bgground'), poops: app.querySelector('.poops'), nest: app.querySelector('.nest'),
       panel: app.querySelector('.panel'), sheetWrap: app.querySelector('.sheet-wrap'), sheetBody: app.querySelector('.sheet-body'),
       sheetTitle: app.querySelector('#sheet-title'), modalWrap: app.querySelector('.modal-wrap'), modalBox: app.querySelector('.modal-box'),
     };
@@ -139,8 +142,21 @@
     return hr >= 7 && hr < 18 ? 'day' : hr >= 18 && hr < 20 ? 'dusk' : 'night';
   }
 
+  // Fondo elegido: el cuarto se dibuja con CSS; los demás son dos capas SVG (cielo y suelo)
+  let bgNow = null;
+  function applyBg() {
+    const id = C.BACKGROUNDS[C.state.bg] ? C.state.bg : 'cuarto';
+    if (id === bgNow) return;
+    bgNow = id;
+    E.scene.dataset.bg = id;
+    E.scene.classList.toggle('outdoor', !!C.BACKGROUNDS[id].outdoor);
+    E.bgsky.innerHTML = N.themes.sky(id);
+    E.bgground.innerHTML = N.themes.ground(id);
+  }
+
   host.update = function () {
     const p = C.state.pet;
+    applyBg();
     E.scene.classList.toggle('lights-off', !!(p && p.sleeping));
     E.scene.dataset.sky = skyClass();
     E.nest.hidden = !(p && p.stage === 'egg');
