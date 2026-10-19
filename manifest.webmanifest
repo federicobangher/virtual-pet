@@ -1,7 +1,7 @@
 {
   "name": "Virtual Pet",
   "short_name": "Virtual Pet",
-  "description": "Elegí un huevo de dragón, pájaro o lagarto y cuidalo para que crezca.",
+  "description": "Elegí un huevo de dragón, pájaro, lagarto o tortuga y cuidalo para que crezca. Creado por Facundo Bangher.",
   "lang": "es",
   "author": "Facundo Bangher",
   "start_url": "./index.html",
