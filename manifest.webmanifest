@@ -1,0 +1,18 @@
+{
+  "name": "Virtual Pet",
+  "short_name": "Virtual Pet",
+  "description": "Elegí un huevo de dragón, pájaro o lagarto y cuidalo para que crezca.",
+  "lang": "es",
+  "author": "Facundo Bangher",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2a1f3d",
+  "theme_color": "#2a1f3d",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
