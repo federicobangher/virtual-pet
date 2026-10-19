@@ -3,7 +3,7 @@
   'use strict';
   const N = (window.N = window.N || {});
   const MIN = 60e3, HOUR = 3600e3, DAY = 24 * HOUR;
-  N.APP = { name: 'Virtual Pet', version: '1.7.2', author: 'Facundo Bangher' };
+  N.APP = { name: 'Virtual Pet', version: '1.7.3', author: 'Facundo Bangher' };
 
   const SPECIES = {
     dragon: { name: 'Dragón', fav: 'Carne asada', egg: 'Huevo escamado', hint: 'Comilón: le da hambre seguido' },
@@ -56,9 +56,9 @@
     espacio: { name: 'Espacio', price: 200, desc: 'Entre planetas y estrellas.' },
   };
   const ITEMS = {
-    fruit: { name: 'Fruta', price: 5, kind: 'food', food: 18, health: 2, desc: 'Llena un poco y es sana.' },
-    fav: { name: 'Su comida favorita', price: 12, kind: 'food', food: 35, fun: 10, desc: 'Llena mucho y lo pone contento.' },
-    cake: { name: 'Torta', price: 8, kind: 'food', food: 10, fun: 22, health: -4, desc: 'Lo divierte, pero no es sana.' },
+    fruit: { name: 'Fruta', price: 5, kind: 'food', food: 25, health: 2, desc: 'Llena un poco y es sana.' },
+    fav: { name: 'Su comida favorita', price: 12, kind: 'food', food: 45, fun: 10, desc: 'Llena mucho y lo pone contento.' },
+    cake: { name: 'Torta', price: 8, kind: 'food', food: 12, fun: 22, health: -4, desc: 'Lo divierte, pero no es sana.' },
     medicine: { name: 'Remedio', price: 15, kind: 'med', cure: true, health: 20, desc: 'Cura la enfermedad.' },
     vitamins: { name: 'Vitaminas', price: 20, kind: 'med', health: 35, desc: 'Recupera salud.' },
     hat: { name: 'Gorrito de fiesta', price: 40, kind: 'wear', desc: 'Para los cumpleaños.' },
@@ -77,14 +77,17 @@
     lvYoung: 5, lvAdult: 20, maxLevel: 100,
     minAgeYoung: 2 * HOUR, minAgeAdult: 24 * HOUR,
     xpPerHourCared: 5,
-    awake: { food: 6.5, fun: 6, hygiene: 4, energy: 6 },
-    asleep: { food: 3.5, fun: 1.5, hygiene: 2, energy: -24 },
-    poopHygiene: 3,
-    healthDmg: { sick: 3, food: 4, energy: 2, hygiene: 2, fun: 1.5 },
+    // (despierta: la comida pide a las ~4 h, la diversión a las ~5 h, la higiene a las ~7 h y el sueño a las ~8 h;
+    //  de noche se cansa antes y duerme toda la noche)
+    awake: { food: 13, fun: 12, hygiene: 8, energy: 8 },
+    asleep: { food: 3.5, fun: 1.5, hygiene: 2, energy: -14 },
+    poopHygiene: 4,
+    // sin ningún cuidado se muere en ~1 día (nunca antes de ~20 h)
+    healthDmg: { sick: 2.5, food: 2.5, energy: 1.5, hygiene: 1.5, fun: 1 },
     healthRegen: 4,
     lockout: DAY,
     maxPoops: 4,
-    shinyCare: 68,
+    shinyCare: 62,
   };
 
   const clamp = (v) => (v < 0 ? 0 : v > 100 ? 100 : v);
@@ -334,6 +337,15 @@
   function stageName(st) { return { egg: 'Huevo', baby: 'Bebé', young: 'Joven', adult: 'Adulto' }[st]; }
   function careAvg(p) { return p.careN > 0 ? p.careSum / p.careN : 70; }
 
+  // Dormir da puntos al despertarse, y sólo si se había ido a dormir cansada y descansó de verdad
+  // (así no se puede subir de nivel apretando "Dormir" y "Despertar" muchas veces).
+  function startSleep(p, night) { p.sleeping = true; p.sleptAtNight = !!night; p.sleepE0 = p.energy; }
+  function wakeXP(p) {
+    const e0 = p.sleepE0;
+    p.sleepE0 = null;
+    return e0 != null && e0 < 45 && p.energy - e0 >= 35 ? 8 : 0;
+  }
+
   /* --------- simulación --------- */
   // Avanza la mascota dtMs de tiempo de juego. events: array donde se acumulan eventos.
   function step(p, dtMs, events, rand, simT) {
@@ -363,18 +375,19 @@
       p.fun = clamp(p.fun - R.asleep.fun * dtH);
       p.hygiene = clamp(p.hygiene - R.asleep.hygiene * dtH);
       p.energy = clamp(p.energy - R.asleep.energy * dtH);
-      if (p.energy >= 100) { p.sleeping = false; events.push({ type: 'wake' }); }
+      // si se durmió de noche, sigue durmiendo hasta la mañana aunque ya haya descansado
+      if (p.energy >= 100 && !(p.sleptAtNight && night)) { p.sleeping = false; p.sleptAtNight = false; addXP(p, wakeXP(p), events); events.push({ type: 'wake' }); }
       // a la mañana se despierta sola si ya descansó
-      else if (hour >= 7 && hour < 11 && p.energy >= 60 && p.sleptAtNight) { p.sleeping = false; p.sleptAtNight = false; events.push({ type: 'wake', morning: true }); }
+      else if (hour >= 7 && hour < 11 && p.energy >= 60 && p.sleptAtNight) { p.sleeping = false; p.sleptAtNight = false; addXP(p, wakeXP(p), events); events.push({ type: 'wake', morning: true }); }
     } else {
       const nightTired = night ? 1.5 : 1; // de noche se cansa más rápido
       p.food = clamp(p.food - R.awake.food * m * trait(p, 'food') * dtH);
       p.fun = clamp(p.fun - R.awake.fun * m * trait(p, 'fun') * dtH);
       p.hygiene = clamp(p.hygiene - R.awake.hygiene * trait(p, 'hygiene') * dtH);
       p.energy = clamp(p.energy - R.awake.energy * m * trait(p, 'energy') * nightTired * dtH);
-      if (p.energy <= 0) { p.sleeping = true; p.sleptAtNight = night; p.fun = clamp(p.fun - 10); events.push({ type: 'collapse' }); }
+      if (p.energy <= 0) { startSleep(p, night); p.fun = clamp(p.fun - 10); events.push({ type: 'collapse' }); }
       // de noche, si nadie le presta atención por un rato, se duerme sola
-      else if (night && p.energy < 80 && simT - (p.lastInteract || 0) > 30 * MIN) { p.sleeping = true; p.sleptAtNight = true; events.push({ type: 'nightSleep' }); }
+      else if (night && p.energy < 80 && simT - (p.lastInteract || 0) > 30 * MIN) { startSleep(p, true); events.push({ type: 'nightSleep' }); }
       // caca
       if (p.digest > 20 && p.poops.length < R.maxPoops && rand() < Math.min(0.95, p.digest / 90) * 0.7 * dtH) {
         p.digest = Math.max(0, p.digest - 45);
@@ -525,14 +538,14 @@
       if ((S.inv[itemId] || 0) <= 0) return no('No te queda. Comprá en la tienda.');
       if (p.food >= 96 && itemId !== 'cake') return no('¡Estoy lleno!');
       S.inv[itemId]--;
-      const hungry = p.food < 80;
+      const f0 = p.food;
       p.food = clamp(p.food + it.food);
       if (it.fun) p.fun = clamp(p.fun + it.fun);
       if (it.health) p.health = clamp(p.health + it.health);
       p.digest += it.food;
       S.stats.feeds++;
       const r = done(ok('¡Ñam!', { anim: 'eat' }));
-      gain(hungry ? (itemId === 'fav' ? 10 : 8) : 2);
+      gain(f0 < 50 ? (itemId === 'fav' ? 10 : 8) : f0 < 80 ? 3 : 0);
       return r;
     },
     medicate(itemId) {
@@ -543,11 +556,11 @@
       if (it.cure && !p.sick) return no('No está enfermo. Guardá el remedio para cuando lo necesite.');
       if (!it.cure && p.health >= 98) return no('Ya tiene la salud completa.');
       S.inv[itemId]--;
-      const weak = p.health < 80;
+      const weak = p.health < 60;
       if (it.cure) { p.sick = false; S.stats.cures++; }
       p.health = clamp(p.health + it.health);
       const r = done(ok(it.cure ? '¡Se curó!' : '¡Más fuerte!', { anim: 'happy' }));
-      gain(it.cure ? 15 : weak ? 5 : 1);
+      gain(it.cure ? 15 : weak ? 5 : 0);
       return r;
     },
     bath() {
@@ -555,12 +568,12 @@
       if (!alive() || p.stage === 'egg') return no('');
       if (p.sleeping) return no('Está durmiendo.');
       if (p.hygiene >= 95) return no('Ya está limpito.');
-      const dirty = p.hygiene < 70;
+      const h0 = p.hygiene;
       p.hygiene = 100;
       S.stats.baths++;
       p.fun = clamp(p.fun + (p.species === 'lizard' || p.species === 'turtle' ? 6 : -2));
       const r = done(ok('¡Qué limpito!', { anim: 'bath' }));
-      gain(dirty ? 8 : 2);
+      gain(h0 < 50 ? 8 : h0 < 75 ? 3 : 0);
       return r;
     },
     clean(poopId) {
@@ -579,16 +592,15 @@
       if (!alive() || p.stage === 'egg') return no('');
       if (p.sleeping) {
         p.sleeping = false;
+        const xp = wakeXP(p);
         if (p.energy < 40) { p.fun = clamp(p.fun - 8); return done(ok('Se despertó de mal humor…')); }
-        return done(ok('¡Buen día!'));
+        const r = done(ok('¡Buen día!'));
+        if (xp) gain(xp);
+        return r;
       }
       if (p.energy > 85) return no('¡No tengo sueño!');
-      const tired = p.energy < 40;
-      p.sleeping = true;
-      p.sleptAtNight = isNight(now());
-      const r = done(ok('Dulces sueños…'));
-      if (tired) gain(6);
-      return r;
+      startSleep(p, isNight(now()));
+      return done(ok('Dulces sueños…'));
     },
     pet() {
       const p = S.pet;
@@ -599,7 +611,7 @@
       if (p.sleeping) return no('');
       p.fun = clamp(p.fun + 3);
       const r = done(ok('', { anim: 'love' }));
-      if (t - (p.lastPetXP || 0) > 60000) { p.lastPetXP = t; gain(1); }
+      if (t - (p.lastPetXP || 0) > 10 * MIN) { p.lastPetXP = t; gain(1); }
       return r;
     },
     canPlay() {
@@ -615,14 +627,17 @@
       if (!alive()) return no('');
       const ratio = Math.max(0, Math.min(1, score / Math.max(1, max)));
       const coins = Math.round(4 + ratio * 16);
+      const bored = p.fun < 60;
       p.fun = clamp(p.fun + 15 + ratio * 20);
-      p.energy = clamp(p.energy - 10);
-      p.food = clamp(p.food - 3);
+      // jugar cansa, da hambre y ensucia
+      p.energy = clamp(p.energy - 12);
+      p.food = clamp(p.food - 6);
+      p.hygiene = clamp(p.hygiene - 5);
       S.coins += coins;
       S.totalGames++;
       S.stats.games++;
       const r = done(ok('', { coins }));
-      gain(Math.round(5 + ratio * 12));
+      gain(bored ? Math.round(5 + ratio * 12) : Math.round(1 + ratio * 3));
       return r;
     },
     buy(itemId, qty) {

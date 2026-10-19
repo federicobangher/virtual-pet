@@ -578,7 +578,7 @@
   function ageOf(ms) { return C.ageText({ age: ms || 0 }); }
   const HELP = `<p>Tu mascota tiene cinco necesidades que bajan con el tiempo, aunque cierres el juego: <b>comida, energía, diversión, higiene y salud</b>.</p>
     <p>Si la descuidás se enferma. Si se enferma y no le das el remedio, o pasa mucho tiempo sin comer, la salud baja. <b>Si la salud llega a cero, se muere</b> y tenés que esperar <b>24 horas</b> para empezar con un huevo nuevo.</p>
-    <p>Tiene <b>niveles del 0 al 100</b>. Sube de nivel cuando la cuidás (darle de comer cuando tiene hambre, bañarla, jugar, limpiar, hacerla dormir cuando está cansada) y con el tiempo, si está bien atendida. Cada nivel da monedas, y cada 10 niveles hay un premio grande.</p>
+    <p>Tiene <b>niveles del 0 al 100</b>. Sube de nivel cuando la cuidás y lo necesitaba (darle de comer cuando tiene hambre, bañarla cuando está sucia, jugar cuando se aburre, limpiar, dejarla dormir cuando está cansada) y con el tiempo, si está bien atendida. Cada nivel da monedas, y cada 10 niveles hay un premio grande.</p>
     <p>Crece de <b>bebé</b> a <b>joven</b> en el nivel 5 y a <b>adulto</b> en el nivel 20. Si la cuidaste muy bien, de adulta tiene una <b>forma brillante</b>.</p>
     <p>Cuando necesita algo, te lo pide con un globito y un ícono sobre la cabeza. Tocalos y lo atendés al instante.</p>
     <p>Cada especie tiene su personalidad: el <b>dragón</b> es comilón, el <b>pájaro</b> se aburre rápido, el <b>lagarto</b> es dormilón y la <b>tortuga</b> es paciente y casi no se enferma.</p>
