@@ -52,6 +52,7 @@
     const pa = N.petAnim({
       svg: () => E.petsvg.firstElementChild, view: () => view, ms: { active: 42, idle: 83, sleep: 200, egg: 63 },
       slow: () => !E.sheetWrap.hidden || !E.modalWrap.hidden,
+      pauseHidden: true, respectReduced: true,
       extra: (t) => { // el olorcito de las cacas
         const st = E.poops.querySelectorAll('.stink');
         if (!st.length) return;

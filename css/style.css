@@ -524,3 +524,6 @@ body.mode-desktop .meter.low .mi { animation: none; }
   .mem-grid { grid-template-columns: repeat(6, 1fr); max-width: 520px; }
   .gg-pet { width: min(160px, 30vh); }
 }
+/* globito: los textos largos (logros) pasan a dos renglones en vez de salirse del globo */
+.bubble { white-space: normal; width: max-content; max-width: min(300px, 86vw); text-align: center; line-height: 1.25; }
+.dpet .bubble { max-width: min(270px, calc(100vw - 12px)); }

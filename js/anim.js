@@ -64,7 +64,7 @@
       set('.peck', `rotate(${(8 * wave(t, 0.32)).toFixed(1)}deg)`);
       Q('.zzz:not(.notes) .z').forEach((z, i) => {
         const ph = ((t + i * 0.8) % 2.4) / 2.4;
-        fade(z, (ph < 0.25 ? ph / 0.25 : 1 - (ph - 0.25) / 0.75).toFixed(2));
+        fade(z, (0.5 + 0.5 * (ph < 0.25 ? ph / 0.25 : 1 - (ph - 0.25) / 0.75)).toFixed(2)); // nunca se borran: se ven sobre cualquier fondo
         z.style.transform = `translate(0px, ${(4 - 18 * ph).toFixed(1)}px) scale(${(0.7 + 0.4 * ph).toFixed(2)})`;
       });
       if (cl.contains('act-special')) {
@@ -104,8 +104,9 @@
       let next = 300;
       const t = (performance.now() - t0) / 1000;
       try {
-        if (document.hidden) next = 1000; // en segundo plano no se dibuja nada
-        else if (reduced()) next = 1000;
+        if (o.pauseHidden && document.hidden) next = 1000; // en segundo plano no se dibuja nada
+        // movimiento reducido (accesibilidad del celular): la mascota queda quieta, con las Z de dormir a la vista
+        else if (o.respectReduced && reduced()) next = 1000;
         else {
           next = animate(t);
           if (o.extra) o.extra(t);

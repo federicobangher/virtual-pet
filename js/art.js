@@ -452,10 +452,11 @@
     const tx = head.x + head.r * 0.7, ty = head.top - 4;
     if (mood === 'sleep') {
       // Las Z salen de arriba de la cabeza, del lado de la cara, y suben alejándose
-      const zx = head.x + dir * head.r * 0.45, zy = head.top + head.r * 0.15;
-      const zt = (cls, dx, dy, size, ch) => `<g transform="translate(${f(zx + dir * dx)} ${f(zy - dy)})"><g class="z ${cls}"><text x="0" y="0" text-anchor="middle" font-size="${size}" stroke="#fff" stroke-width="${f(size / 6)}" stroke-linejoin="round" paint-order="stroke">${ch}</text></g></g>`;
-      s += `<g class="zzz" font-family="Grandstander, Baloo 2, Trebuchet MS, sans-serif" font-weight="800" fill="#5b6cf0">` +
-        zt('z1', 0, 0, 17, 'z') + zt('z2', 13, 15, 22, 'z') + zt('z3', 28, 33, 28, 'Z') + `</g>`;
+      // (arrancan apenas arriba de la cabeza, corridas hacia el lado de la cara, para no quedar tapadas por cuernos o cresta)
+      const zx = head.x + dir * head.r * 0.8, zy = head.top - 2;
+      const zt = (cls, dx, dy, size, ch) => `<g transform="translate(${f(zx + dir * dx)} ${f(zy - dy)})"><g class="z ${cls}"><text x="0" y="0" text-anchor="middle" font-size="${size}" stroke="#2a1f3d" stroke-width="${f(size / 5)}" stroke-linejoin="round" paint-order="stroke">${ch}</text></g></g>`;
+      s += `<g class="zzz" font-family="Grandstander, Baloo 2, Trebuchet MS, sans-serif" font-weight="800" fill="#a9b6ff">` +
+        zt('z1', 0, 0, 21, 'z') + zt('z2', 15, 17, 26, 'z') + zt('z3', 32, 36, 33, 'Z') + `</g>`;
     }
     if (mood === 'sick') {
       const cx = head.x, cy = head.top - 10;

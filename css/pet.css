@@ -26,7 +26,8 @@ svg.pet .chomp .shut { animation: pet-chomp-s .32s steps(1) infinite; }
 svg.pet .peck { transform-box: fill-box; transform-origin: 20% 50%; animation: pet-peck .32s ease-in-out infinite; }
 svg.pet .tear { animation: pet-tear 2s ease-in infinite; }
 
-svg.pet .zzz .z { animation: pet-z 2.4s ease-out infinite; opacity: 0; transform-box: fill-box; transform-origin: 50% 100%; }
+/* Las Z se ven siempre, aunque la animación esté apagada (Windows sin efectos de animación, celular con movimiento reducido) */
+svg.pet .zzz .z { animation: pet-z 2.4s ease-out infinite; opacity: .9; transform-box: fill-box; transform-origin: 50% 100%; }
 svg.pet .zzz .z2 { animation-delay: .8s; }
 svg.pet .zzz .z3 { animation-delay: 1.6s; }
 svg.pet .dizzy { animation: pet-spin 2.4s linear infinite; }
