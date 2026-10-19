@@ -8,6 +8,10 @@
   const h = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const ic = (n, cls) => art.icon(n, cls);
+  // Escriben en la página sólo si el valor cambió (así el navegador no recalcula nada de más cada segundo)
+  const setText = (el, v) => { v = String(v); if (el.textContent !== v) el.textContent = v; };
+  const setW = (el, pct) => { const v = pct + '%'; if (el.style.width !== v) el.style.width = v; };
+  const setHTML = (el, html) => { if (el._html !== html) { el._html = html; el.innerHTML = html; } };
   const coinIc = () => `<span class="coin-ic">${art.itemSVG('coin')}</span>`;
 
   const METERS = [
@@ -40,7 +44,7 @@
         key = [p.species, p.stage, p.variant, m, this.dir, this.walking, this.flying, S.wearing, this.act].join('|');
         if (force || key !== this.key) svg = art.petSVG({ species: p.species, stage: p.stage, variant: p.variant, mood: m, dir: this.dir, accessory: S.wearing, walking: this.walking, flying: this.flying, act: this.act });
       }
-      if (svg) { this.el.innerHTML = svg; this.key = key; }
+      if (svg) { this.el.innerHTML = svg; this.key = key; if (this.onSvg) this.onSvg(); }
     }
   }
 
@@ -117,19 +121,19 @@
   function updatePanel() {
     const S = C.state, p = S.pet;
     if (!P.hud) return;
-    P.hud.querySelector('.ncoins').textContent = S.coins;
-    P.hud.querySelector('.pname').textContent = p ? p.name : 'Virtual Pet';
+    setText(P.hud.querySelector('.ncoins'), S.coins);
+    setText(P.hud.querySelector('.pname'), p ? p.name : 'Virtual Pet');
     const chip = P.hud.querySelector('.pstage');
-    chip.textContent = p ? (p.dead ? 'En el cielo' : p.stage === 'egg' ? 'Huevo' : C.stageName(p.stage) + ' · ' + C.ageText(p)) : '';
+    setText(chip, p ? (p.dead ? 'En el cielo' : p.stage === 'egg' ? 'Huevo' : C.stageName(p.stage) + ' · ' + C.ageText(p)) : '');
     chip.hidden = !p;
     const egg = p && p.stage === 'egg';
     P.meters.hidden = !p || egg || p.dead;
     P.level.hidden = !p || egg || p.dead;
     if (p && !egg && !p.dead) {
       const max = p.level >= C.R.maxLevel;
-      P.level.querySelector('.lvnum').textContent = 'Nivel ' + p.level;
-      P.level.querySelector('.xp i').style.width = (max ? 100 : Math.min(100, (p.xp / C.xpNeed(p.level)) * 100)) + '%';
-      P.level.querySelector('.lvnext').textContent = max ? '¡Máximo!' : Math.floor(p.xp) + ' / ' + C.xpNeed(p.level);
+      setText(P.level.querySelector('.lvnum'), 'Nivel ' + p.level);
+      setW(P.level.querySelector('.xp i'), max ? 100 : Math.min(100, Math.round((p.xp / C.xpNeed(p.level)) * 1000) / 10));
+      setText(P.level.querySelector('.lvnext'), max ? '¡Máximo!' : Math.floor(p.xp) + ' / ' + C.xpNeed(p.level));
       P.level.classList.toggle('max', max);
     }
     P.eggbar.hidden = !egg;
@@ -137,14 +141,15 @@
       METERS.forEach((m) => {
         const v = Math.round(p[m.k]);
         const el = P.meters.querySelector('.m-' + m.k);
-        el.querySelector('i').style.width = v + '%';
+        setW(el.querySelector('i'), v);
         el.classList.toggle('low', v < 25);
-        el.title = `${m.label}: ${v}%`;
+        const ti = `${m.label}: ${v}%`;
+        if (el.title !== ti) el.title = ti;
       });
     }
     if (egg) {
-      P.eggbar.querySelector('.warmth i').style.width = Math.round(p.egg.warmth) + '%';
-      P.eggbar.querySelector('.hatch i').style.width = Math.min(100, Math.round(p.egg.progress)) + '%';
+      setW(P.eggbar.querySelector('.warmth i'), Math.round(p.egg.warmth));
+      setW(P.eggbar.querySelector('.hatch i'), Math.min(100, Math.round(p.egg.progress)));
     }
     // botones
     const list = !p || p.dead ? [] : egg ? EGG_ACTIONS : ACTIONS;
@@ -161,14 +166,14 @@
     }
     if (p && !egg && !p.dead) {
       const sl = P.actions.querySelector('.act-sleep');
-      sl.querySelector('.al').textContent = p.sleeping ? 'Despertar' : 'Dormir';
-      sl.querySelector('.ai').innerHTML = ic(p.sleeping ? 'wake' : 'sleep');
+      setText(sl.querySelector('.al'), p.sleeping ? 'Despertar' : 'Dormir');
+      setHTML(sl.querySelector('.ai'), ic(p.sleeping ? 'wake' : 'sleep'));
       const cb = P.actions.querySelector('.act-clean .badge');
-      cb.hidden = !p.poops.length; cb.textContent = p.poops.length;
+      cb.hidden = !p.poops.length; setText(cb, p.poops.length);
       const mb = P.actions.querySelector('.act-med .badge');
-      mb.hidden = !p.sick; mb.textContent = '!';
+      mb.hidden = !p.sick; setText(mb, '!');
       const fb = P.actions.querySelector('.act-food .badge');
-      fb.hidden = !(p.food < 25); fb.textContent = '!';
+      fb.hidden = !(p.food < 25); setText(fb, '!');
       P.actions.querySelectorAll('.act').forEach((b) => {
         const id = b.className.match(/act-(\w+)/)[1];
         b.classList.toggle('dim', p.sleeping && ['food', 'play', 'bath'].includes(id));
@@ -234,6 +239,9 @@
     if (!svg || !svg.dataset.hx) return;
     const hx = +svg.dataset.hx, ht = +svg.dataset.ht, hr = +svg.dataset.hr, dir = +svg.dataset.dir;
     const x = hx + dir * hr * 1.45, y = ht + hr * 0.8;
+    // el globito de diálogo sale justo arriba de la cabeza (sirve para cualquier especie y etapa)
+    const bub = Math.round(Math.min(92, Math.max(30, (1 - ht / 200) * 100 + 3)));
+    if (box._bub == null || Math.abs(box._bub - bub) > 3) { box._bub = bub; box.style.setProperty('--bub', bub + '%'); }
     needEl.style.left = ((x + 20) / 240 * 100).toFixed(1) + '%';
     needEl.style.top = (y / 200 * 100).toFixed(1) + '%';
   }
@@ -241,7 +249,7 @@
   let nextIdle = Date.now() + 8000;
   function idleActs(t) {
     const p = C.state.pet, v = H.view();
-    if (!p || p.dead || p.stage === 'egg' || p.sleeping || p.sick || modalOpen) return;
+    if (!p || p.dead || p.stage === 'egg' || p.sleeping || p.sick || modalOpen || (sheetName && H.kind === 'room')) return;
     if (!H.isIdle || !H.isIdle() || v.busy) return;
     if (t < nextIdle) return;
     nextIdle = t + 9000 + Math.random() * 15000;
@@ -328,7 +336,7 @@
     const b = SHEETS[name];
     if (!b) return;
     const r = b(arg);
-    host().sheet(r.title, r.node, { onClose: () => { sheetName = null; if (r.onClose) r.onClose(); }, wide: r.wide });
+    host().sheet(r.title, r.node, { onClose: () => { sheetName = null; if (currentSheet === r) currentSheet = null; if (r.onClose) r.onClose(); }, wide: r.wide });
     currentSheet = r;
   }
   let currentSheet = null;
@@ -405,7 +413,7 @@
   const SHEETS = {
     food() {
       const node = h('<div class="list"></div>');
-      const render = () => { node.innerHTML = ['fruit', 'fav', 'cake'].map((id) => itemRow(id, 'use')).join(''); };
+      const render = () => { setHTML(node, ['fruit', 'fav', 'cake'].map((id) => itemRow(id, 'use')).join('')); };
       render(); bindItems(node, render);
       return { title: '¿Qué le das de comer?', node, refresh: render };
     },
@@ -413,8 +421,8 @@
       const node = h('<div class="list"></div>');
       const render = () => {
         const p = C.state.pet;
-        node.innerHTML = (p && p.sick ? '<p class="note warn">Está enfermo: dale el remedio.</p>' : '<p class="note">El remedio sólo sirve si está enfermo. Las vitaminas recuperan salud.</p>') +
-          ['medicine', 'vitamins'].map((id) => itemRow(id, 'use')).join('');
+        setHTML(node, (p && p.sick ? '<p class="note warn">Está enfermo: dale el remedio.</p>' : '<p class="note">El remedio sólo sirve si está enfermo. Las vitaminas recuperan salud.</p>') +
+          ['medicine', 'vitamins'].map((id) => itemRow(id, 'use')).join(''));
       };
       render(); bindItems(node, render);
       return { title: 'Botiquín', node, refresh: render };
@@ -422,11 +430,11 @@
     shop() {
       const node = h('<div class="list"></div>');
       const render = () => {
-        node.innerHTML = `<p class="note">Tenés <b>${C.state.coins}</b>${coinIc()} — ganás más jugando y entrando todos los días.</p>` +
+        setHTML(node, `<p class="note">Tenés <b>${C.state.coins}</b>${coinIc()} — ganás más jugando y entrando todos los días.</p>` +
           '<h4>Comida</h4>' + ['fruit', 'fav', 'cake'].map((id) => itemRow(id, 'shop')).join('') +
           '<h4>Salud</h4>' + ['medicine', 'vitamins'].map((id) => itemRow(id, 'shop')).join('') +
           '<h4>Accesorios</h4>' + ['bow', 'scarf', 'hat', 'glasses', 'crown'].map((id) => itemRow(id, 'shop')).join('') +
-          (host().kind === 'room' ? `<h4>${ic('image')} Fondos</h4>` + bgGrid() : '');
+          (host().kind === 'room' ? `<h4>${ic('image')} Fondos</h4>` + bgGrid() : ''));
       };
       render(); bindItems(node, render); bindBg(node, render);
       return { title: 'Tienda', node, refresh: render };
@@ -451,10 +459,10 @@
       const render = () => {
         const S = C.state, st = S.settings, p = S.pet;
         const owned = Object.keys(S.owned);
-        const nAch = Object.keys(S.achievements).length;
-        const totAch = C.ACHIEVEMENTS.filter((a) => !(desk && a.roomOnly)).length;
-        node.innerHTML = `
-          <section class="row more-top"><button type="button" class="btn" data-open="achievements">${ic('star')} Logros <span class="cnt">${Math.min(nAch, totAch)}/${totAch}</span></button><button type="button" class="btn" data-open="album">${ic('book')} Álbum <span class="cnt">${S.album.length}</span></button></section>
+        const achList = C.ACHIEVEMENTS.filter((a) => S.achievements[a.id] || !(desk && a.roomOnly));
+        const nAch = achList.filter((a) => S.achievements[a.id]).length, totAch = achList.length;
+        setHTML(node, `
+          <section class="row more-top"><button type="button" class="btn" data-open="achievements">${ic('star')} Logros <span class="cnt">${nAch}/${totAch}</span></button><button type="button" class="btn" data-open="album">${ic('book')} Álbum <span class="cnt">${S.album.length}</span></button></section>
           ${p && !p.dead ? `<section><h4>${ic('pencil')} Nombre</h4><form class="rename"><input id="rename" maxlength="16" value="${esc(p.name)}" aria-label="Nombre de la mascota"><button class="btn" type="submit">Cambiar</button></form></section>` : ''}
           ${desk ? '' : `<section class="bg-sec"><h4>${ic('image')} Fondo del cuarto</h4>${bgGrid()}</section>`}
           <section><h4>${ic('shirt')} Accesorios</h4>${owned.length ? '<div class="list">' + owned.map((id) => itemRow(id, 'shop')).join('') + '</div>' : '<p class="note">Todavía no compraste accesorios. Están en la tienda.</p>'}</section>
@@ -482,7 +490,7 @@
             <button type="button" class="btn ghost danger" data-reset>Restablecer todo de cero</button>
             <div class="confirm" hidden><p class="note warn">¿Seguro? Esto no se puede deshacer.</p><div class="row"><button type="button" class="btn danger-fill" data-reset-yes>Sí, borrar todo</button><button type="button" class="btn" data-reset-no>Cancelar</button></div></div>
           </section>
-          ${desk ? `<section class="row"><button type="button" class="btn ghost" data-quit>${ic('power')} Cerrar Virtual Pet</button><button type="button" class="btn ghost" data-uninstall>Desinstalar</button></section>` : ''}`;
+          ${desk ? `<section class="row"><button type="button" class="btn ghost" data-quit>${ic('power')} Cerrar Virtual Pet</button><button type="button" class="btn ghost" data-uninstall>Desinstalar</button></section>` : ''}`);
       };
       render();
       node.addEventListener('submit', (e) => { e.preventDefault(); const r = C.act.rename(node.querySelector('#rename').value); say(r.ok ? '¡Me gusta mi nombre!' : r.msg, !r.ok); });
@@ -544,8 +552,9 @@
     const node = h('<div class="ach-list"></div>');
     const render = () => {
       const got = C.state.achievements;
-      node.innerHTML = `<p class="note">${Object.keys(got).length} de ${C.ACHIEVEMENTS.length} logros. Cada logro da monedas.</p>` +
-        C.ACHIEVEMENTS.filter((a) => got[a.id] || !(a.roomOnly && host().kind === 'desktop')).map((a) => `<div class="ach ${got[a.id] ? 'on' : ''}"><span class="ach-ic">${ic(got[a.id] ? 'star' : 'help')}</span><span class="ach-txt"><b>${esc(a.name)}</b><small>${esc(a.desc)}</small></span><span class="ach-prize">${got[a.id] ? new Date(got[a.id]).toLocaleDateString() : '+' + a.coins + coinIc()}</span></div>`).join('');
+      const list = C.ACHIEVEMENTS.filter((a) => got[a.id] || !(a.roomOnly && host().kind === 'desktop'));
+      setHTML(node, `<p class="note">${list.filter((a) => got[a.id]).length} de ${list.length} logros. Cada logro da monedas.</p>` +
+        list.map((a) => `<div class="ach ${got[a.id] ? 'on' : ''}"><span class="ach-ic">${ic(got[a.id] ? 'star' : 'help')}</span><span class="ach-txt"><b>${esc(a.name)}</b><small>${esc(a.desc)}</small></span><span class="ach-prize">${got[a.id] ? new Date(got[a.id]).toLocaleDateString() : '+' + a.coins + coinIc()}</span></div>`).join(''));
     };
     render();
     return { title: 'Logros', node, refresh: render };
@@ -555,9 +564,9 @@
     const render = () => {
       const S = C.state, p = S.pet;
       const canShoot = p && !p.dead && p.stage !== 'egg';
-      node.innerHTML = (canShoot ? `<button type="button" class="btn primary" data-photo>${ic('star')} Sacar una foto</button>` : '') +
+      setHTML(node, (canShoot ? `<button type="button" class="btn primary" data-photo>${ic('star')} Sacar una foto</button>` : '') +
         (S.album.length ? '<div class="album-grid">' + S.album.map((ph) => `<figure class="photo"><div class="ph-pet">${art.petSVG({ species: ph.species, stage: ph.stage, variant: ph.variant, mood: 'happy', accessory: ph.accessory })}</div><figcaption><span><b>${esc(ph.name)}</b> · ${C.stageName(ph.stage)}${ph.level != null ? ' · Nv ' + ph.level : ''}</span><small>${new Date(ph.t).toLocaleDateString()}</small></figcaption></figure>`).join('') + '</div>'
-          : '<p class="note">Cuando tu mascota nace y cuando crece, se guarda una foto acá. También podés sacar fotos cuando quieras.</p>');
+          : '<p class="note">Cuando tu mascota nace y cuando crece, se guarda una foto acá. También podés sacar fotos cuando quieras.</p>'));
     };
     render();
     node.addEventListener('click', (e) => { if (e.target.closest('[data-photo]')) { const r = C.act.photo(); if (r.ok) { snd.play('coin'); render(); } } });
@@ -586,6 +595,7 @@
     let game = null;
     const finish = (score, max) => {
       const res = C.act.gameResult(score, max);
+      if (!res.ok) { closeSheet(); return; }
       const ok = score / max >= 0.5;
       snd.play(ok ? 'happy' : 'sad');
       node.innerHTML = `<div class="game-over"><div class="go-pet"></div><h3>${ok ? '¡Muy bien!' : '¡Buen intento!'}</h3><p>Puntaje: <b>${score}</b> de ${max}</p><p class="won">+${res.coins} ${coinIc()} · más diversión</p>
@@ -636,7 +646,7 @@
       if (!inp.value) inp.placeholder = { dragon: 'Ej.: Chispa', bird: 'Ej.: Pío', lizard: 'Ej.: Lagartijo', turtle: 'Ej.: Manuelita' }[pick];
     });
     return {
-      node, persistent: true,
+      node, persistent: true, kind: 'adopt',
       onOk: () => {
         const inp = node.querySelector('#adopt-name');
         const name = inp.value.trim() || inp.placeholder.replace('Ej.: ', '');
@@ -690,7 +700,7 @@
       cd.textContent = [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60].map((x) => String(x).padStart(2, '0')).join(':');
     };
     clearInterval(lockTimer); lockTimer = setInterval(upd, 1000); upd();
-    return { node, persistent: true, onOk: () => { if (C.isLocked()) return false; clearInterval(lockTimer); return true; } };
+    return { node, persistent: true, kind: 'locked', onOk: () => { if (C.isLocked()) return false; clearInterval(lockTimer); return true; } };
   }
 
   function eventModal(e) {
@@ -806,7 +816,7 @@
   }
 
   function loop() {
-    C.tick();
+    if (C.tick() === null) { onResume(); return; }
     const t = Date.now();
     updatePanel();
     H.update && H.update();
@@ -838,7 +848,12 @@
     C.load();
     N.on('event', onEvent);
     N.on('change', () => { updatePanel(); refreshSheet(); H.update && H.update(); });
-    N.on('reset', () => { Object.keys(askLevel).forEach((k) => delete askLevel[k]); H.onReset && H.onReset(); H.view().render(true); flow(); });
+    N.on('reset', () => {
+      Object.keys(askLevel).forEach((k) => delete askLevel[k]);
+      // si se cargó otra partida (copia de seguridad, nube) con mascota, ya no hace falta elegir huevo ni esperar
+      if (modalOpen && (modalOpen.kind === 'adopt' || modalOpen.kind === 'locked') && C.state.pet) { clearInterval(lockTimer); closeModal(); }
+      H.onReset && H.onReset(); H.view().render(true); flow();
+    });
     H.init();
     buildPanel(H.panelRoot());
     onResume();
@@ -856,5 +871,5 @@
     });
   }
 
-  N.ui = { start, doIdle: (a) => doIdle(a), PetView, fx, say, openSheet, closeSheet, h, esc, ic, coinIc, warmEgg, doAct, pushModal, flow, get modalOpen() { return modalOpen; } };
+  N.ui = { start, doIdle: (a) => doIdle(a), PetView, fx, say, openSheet, closeSheet, h, esc, ic, coinIc, warmEgg, doAct, pushModal, flow, get modalOpen() { return modalOpen; }, get sheetOpen() { return sheetName; } };
 })();

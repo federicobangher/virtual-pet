@@ -338,10 +338,11 @@ html.desk, body.mode-desktop { background: transparent !important; overflow: hid
 .dcard .egg-pick .ep-art { max-width: 80px; }
 
 /* globo de diálogo a la altura de la cabeza según la etapa */
+/* (--bub lo calcula ui.js a partir de dónde está la cabeza en el dibujo) */
 .petbox[data-stage="egg"] .bubble, .dpet[data-stage="egg"] .bubble { bottom: 64%; }
-.petbox[data-stage="baby"] .bubble, .dpet[data-stage="baby"] .bubble { bottom: 70%; }
-.petbox[data-stage="young"] .bubble, .dpet[data-stage="young"] .bubble { bottom: 80%; }
-.petbox[data-stage="adult"] .bubble, .dpet[data-stage="adult"] .bubble { bottom: 90%; }
+.petbox[data-stage="baby"] .bubble, .dpet[data-stage="baby"] .bubble { bottom: var(--bub, 70%); }
+.petbox[data-stage="young"] .bubble, .dpet[data-stage="young"] .bubble { bottom: var(--bub, 80%); }
+.petbox[data-stage="adult"] .bubble, .dpet[data-stage="adult"] .bubble { bottom: var(--bub, 90%); }
 
 /* En el escritorio la mascota se anima con un reloj propio a 10 cuadros por segundo (desktop.js),
    así que se apagan las animaciones CSS, que Chromium recalcula 60 veces por segundo. */
@@ -454,3 +455,72 @@ body.mode-desktop .meter.low .mi { animation: none; }
 /* el volcán ilumina su propia noche */
 .scene[data-bg="volcan"][data-sky="night"] .bgsky { filter: brightness(.6) saturate(.9) hue-rotate(-8deg); }
 .scene[data-bg="volcan"][data-sky="night"] .bgground { filter: brightness(.75); }
+
+/* =================================================================
+   RENDIMIENTO
+   ================================================================= */
+/* En el cuarto también se anima con el reloj propio (js/anim.js), a pocos cuadros por segundo. */
+.mode-room .petbox svg.pet, .mode-room .petbox svg.pet *, .mode-room .poop .stink { animation: none !important; }
+/* Las fotos del álbum son fotos: quietas */
+.ph-pet svg.pet, .ph-pet svg.pet * { animation: none !important; }
+.petbox { will-change: transform; }
+
+/* =================================================================
+   TAMAÑOS: la mascota se adapta al lugar que tiene (celular, tablet, compu)
+   ================================================================= */
+@supports (width: 1cqh) {
+  .scene { container-type: size; }
+  .petbox { width: min(60cqw, 64cqh, 430px); }
+  .scene.has-egg .petbox { width: min(50cqw, 52cqh, 340px); }
+  .nest { width: min(62cqw, 64cqh, 420px); }
+  .poop { width: clamp(40px, 7cqh, 64px); height: auto; aspect-ratio: 46 / 40; }
+}
+
+/* Tablet parada: la app usa más ancho */
+@media (min-width: 700px) and (min-height: 900px) {
+  .room-app { max-width: 760px; }
+  .sheet { max-width: 680px; }
+  .mode-room .panel { gap: 14px; padding-block: 18px; }
+  .mode-room .act { padding: 10px 4px 8px; }
+  .mode-room .act .ai { width: 40px; height: 40px; }
+  .mode-room .act .ai .ic { width: 26px; height: 26px; }
+  .mode-room .act .al { font-size: .9rem; }
+  .mode-room .pname { font-size: 1.7rem; }
+}
+
+/* Acostado (celular o tablet horizontal): cuarto a la izquierda y panel a la derecha */
+@media (orientation: landscape) and (max-height: 600px), (orientation: landscape) and (min-width: 1000px) and (min-height: 600px) {
+  .room-app { max-width: 1280px; flex-direction: row; }
+  .scene { min-height: 0; }
+  .mode-room .panel { flex: 0 0 clamp(300px, 38%, 420px); margin: 0 0 0 -18px; border-top: 0; border-left: 3px solid var(--ink); border-radius: 22px 0 0 22px; overflow-y: auto; align-content: start; padding-top: max(14px, env(safe-area-inset-top, 0px)); }
+  .sheet { max-width: 640px; max-height: 94%; }
+}
+@media (orientation: landscape) and (max-height: 600px) {
+  .mode-room .panel { gap: 8px; padding-block: 10px; }
+  .mode-room .meter .ml { display: none; }
+  .mode-room .act { padding: 5px 2px 4px; }
+  .mode-room .act .ai { width: 28px; height: 28px; }
+  .mode-room .pname { font-size: 1.2rem; }
+  .modal-wrap { align-items: start; }
+}
+@media (orientation: landscape) and (min-width: 1000px) and (min-height: 600px) {
+  .mode-room .panel { align-content: center; }
+}
+/* ventanas en el celular acostado: más compactas para que entren sin tener que deslizar */
+@media (orientation: landscape) and (max-height: 600px) {
+  .modal-box { padding: 14px 16px; }
+  .modal { gap: 8px; }
+  .modal h2 { font-size: 1.3rem; }
+  .egg-pick { padding: 6px 4px; }
+  .egg-pick .ep-art { max-width: 58px; }
+  .egg-pick small { display: none; }
+  .cel-pet, .go-pet { width: 150px; }
+  .grave { width: 96px; }
+  .prize { font-size: 1.8rem; }
+  .btn.big { padding: .5em 1em; }
+}
+@media (orientation: landscape) and (max-height: 600px) {
+  .g-canvas { width: min(100%, 380px, calc(64vh * 360 / 420)); }
+  .mem-grid { grid-template-columns: repeat(6, 1fr); max-width: 520px; }
+  .gg-pet { width: min(160px, 30vh); }
+}

@@ -3,7 +3,7 @@
   'use strict';
   const N = (window.N = window.N || {});
   const MIN = 60e3, HOUR = 3600e3, DAY = 24 * HOUR;
-  N.APP = { name: 'Virtual Pet', version: '1.7.0', author: 'Facundo Bangher' };
+  N.APP = { name: 'Virtual Pet', version: '1.7.1', author: 'Facundo Bangher' };
 
   const SPECIES = {
     dragon: { name: 'Dragón', fav: 'Carne asada', egg: 'Huevo escamado', hint: 'Comilón: le da hambre seguido' },
@@ -129,7 +129,11 @@
     let raw = null;
     try { raw = localStorage.getItem(KEY); } catch (e) { storageOk = false; }
     if (raw) {
-      try { S = Object.assign(freshState(), JSON.parse(raw)); } catch (e) { S = freshState(); }
+      try { S = Object.assign(freshState(), JSON.parse(raw)); } catch (e) {
+        // partida dañada: se guarda aparte (por las dudas) y se empieza de nuevo
+        try { localStorage.setItem(KEY + '.danada', raw); } catch (e2) {}
+        S = freshState();
+      }
     } else S = freshState();
     migrate(S);
     loadInfo = { fromStorage: !!raw, lastSeen: S.lastSeen };
@@ -138,15 +142,42 @@
   // Completa datos que faltan en partidas de versiones anteriores (o importadas)
   function migrate(st) {
     const f = freshState();
-    st.settings = Object.assign(f.settings, st.settings || {});
-    st.stats = Object.assign(freshStats(), st.stats || {});
-    st.stats.species = st.stats.species || {};
-    st.achievements = st.achievements || {};
+    const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+    st.settings = Object.assign(f.settings, obj(st.settings));
+    st.stats = Object.assign(freshStats(), obj(st.stats));
+    st.stats.species = obj(st.stats.species);
     st.album = Array.isArray(st.album) ? st.album : [];
-    st.inv = st.inv || {}; st.owned = st.owned || {}; st.memorial = st.memorial || [];
-    st.daily = st.daily || { last: null, streak: 0 };
-    st.bgOwned = Object.assign({ cuarto: true }, st.bgOwned || {});
+    st.inv = obj(st.inv); st.owned = obj(st.owned); st.achievements = obj(st.achievements);
+    st.memorial = (Array.isArray(st.memorial) ? st.memorial : []).filter((m) => m && SPECIES[m.species]);
+    st.album = st.album.filter((ph) => ph && SPECIES[ph.species]);
+    st.daily = Object.assign({ last: null, streak: 0 }, obj(st.daily));
+    if (typeof st.daily.streak !== 'number' || !(st.daily.streak >= 0)) st.daily.streak = 0;
+    st.bgOwned = Object.assign({ cuarto: true }, obj(st.bgOwned));
     if (!BACKGROUNDS[st.bg] || !st.bgOwned[st.bg]) st.bg = 'cuarto';
+    const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
+    st.coins = Math.max(0, Math.floor(num(st.coins, R.startCoins)));
+    Object.keys(st.inv).forEach((k) => { st.inv[k] = Math.max(0, Math.floor(num(st.inv[k], 0))); });
+    if (st.wearing && !st.owned[st.wearing]) st.wearing = null;
+    st.lockUntil = num(st.lockUntil, 0);
+    // si el reloj estuvo adelantado, la espera nunca supera las 24 horas desde ahora
+    if (st.lockUntil > now() + R.lockout) st.lockUntil = now() + R.lockout;
+    if (st.pet && (typeof st.pet !== 'object' || !SPECIES[st.pet.species])) st.pet = null;
+    if (st.pet) {
+      const d = newPet(st.pet.species, typeof st.pet.name === 'string' ? st.pet.name : '');
+      // partidas de antes de los niveles: el nivel sale de la etapa
+      if (st.pet.level == null) { const sg = st.pet.stage; st.pet.level = sg === 'adult' ? R.lvAdult : sg === 'young' ? R.lvYoung : 0; st.pet.xp = 0; st.pet.lastPetXP = 0; }
+      st.pet = Object.assign(newPet(st.pet.species, ''), st.pet); // d queda con los valores por defecto
+      const q = st.pet;
+      q.name = String(q.name || d.name).slice(0, 16);
+      ['food', 'energy', 'fun', 'hygiene', 'health'].forEach((k) => { q[k] = clamp(num(q[k], d[k])); });
+      ['age', 'digest', 'careSum', 'careN', 'xp', 'created', 'lastPet', 'lastPetXP'].forEach((k) => { q[k] = Math.max(0, num(q[k], d[k])); });
+      if (!['egg', 'baby', 'young', 'adult'].includes(q.stage)) q.stage = 'baby';
+      if (!Array.isArray(q.poops)) q.poops = [];
+      q.poops = q.poops.filter((x) => x && typeof x.x === 'number').slice(0, R.maxPoops);
+      if (!q.egg || typeof q.egg !== 'object') q.egg = { warmth: 35, progress: q.stage === 'egg' ? 0 : 100 };
+      q.egg.warmth = clamp(num(q.egg.warmth, 35)); q.egg.progress = Math.max(0, num(q.egg.progress, 0));
+      if (q.level != null) q.level = Math.max(0, Math.min(R.maxLevel, Math.floor(num(q.level, 0))));
+    }
     const p = st.pet;
     if (p) {
       if (p.level == null) { p.level = p.stage === 'adult' ? R.lvAdult : p.stage === 'young' ? R.lvYoung : 0; p.xp = 0; p.lastPetXP = 0; }
@@ -176,7 +207,10 @@
     const d = new Date(t);
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
-  function isLocked() { return !S.pet && S.lockUntil > now(); }
+  function isLocked() {
+    if (S.lockUntil > now() + R.lockout) S.lockUntil = now() + R.lockout;
+    return !S.pet && S.lockUntil > now();
+  }
 
   function mood(p) {
     if (!p) return 'normal';
@@ -405,12 +439,17 @@
 
   let timeScale = 1;
   let lastTick = 0;
+  // Devuelve null si pasó demasiado tiempo desde la última vuelta (la compu se suspendió o el celular
+  // congeló la app): en ese caso hay que llamar a resume(), que simula ese rato como "mientras no estabas".
   function tick() {
     const t = now();
-    const real = lastTick ? t - lastTick : 0;
+    if (!lastTick) { lastTick = t; return []; }
+    const real = t - lastTick;
+    if (real > 2 * MIN) return null;
     lastTick = t;
-    if (real <= 0 || real > 5 * MIN) return []; // pausas largas se manejan con resume()
+    if (real <= 0) return [];
     const ev = advance(real * timeScale, { chunk: 10e3 * Math.max(1, timeScale), live: timeScale === 1 });
+    if (S) S.lastSeen = t; // lo simulado llega hasta acá (así resume() no lo vuelve a contar)
     ev.forEach((e) => N.emit('event', e));
     if (ev.length) N.emit('change');
     return ev;
@@ -428,10 +467,11 @@
   }
 
   /* --------- premio diario --------- */
-  function dailyPending() { return dayKey(now()) !== S.daily.last; }
+  // (si el reloj se atrasó y "hoy" quedó antes del último cobro, no se vuelve a cobrar)
+  function dailyPending() { const d = dayKey(now()); return d !== S.daily.last && !(S.daily.last && d < S.daily.last); }
   function claimDaily() {
     const today = dayKey(now());
-    if (S.daily.last === today) return null;
+    if (!dailyPending()) return null;
     const y = dayKey(now() - DAY);
     const streak = S.daily.last === y ? S.daily.streak + 1 : 1;
     let coins = 20 + 5 * Math.min(streak - 1, 6);

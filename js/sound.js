@@ -15,6 +15,19 @@
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});
     return ctx;
   }
+  // Después de sonar, el audio se apaga solo: un AudioContext prendido mantiene despierto el parlante
+  // del celular y gasta batería aunque no suene nada.
+  let idleT = 0, busyUntil = 0;
+  function sleepLater(dur) {
+    if (!ctx) return;
+    busyUntil = Math.max(busyUntil, ctx.currentTime + dur);
+    clearTimeout(idleT);
+    idleT = setTimeout(function check() {
+      if (!ctx) return;
+      if (ctx.currentTime < busyUntil) { idleT = setTimeout(check, (busyUntil - ctx.currentTime) * 1000 + 300); return; }
+      if (ctx.state === 'running') ctx.suspend().catch(() => {});
+    }, (dur + 1.5) * 1000);
+  }
   const enabled = () => !N.core || !N.core.state || N.core.state.settings.sound;
 
   function tone(freq, dur, opt) {
@@ -31,6 +44,8 @@
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     o.connect(g); g.connect(master);
     o.start(t0); o.stop(t0 + dur + 0.02);
+    o.onended = () => { try { o.disconnect(); g.disconnect(); } catch (e) {} };
+    sleepLater((opt.at || 0) + dur + 0.05);
   }
   function seq(notes, type, step, vol) { notes.forEach((f, i) => f && tone(f, step * 1.3, { at: i * step, type, vol })); }
 

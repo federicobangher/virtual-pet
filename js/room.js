@@ -14,7 +14,7 @@
 
   const host = { kind: 'room' };
   let E = {}, view;
-  let x = 50, target = 50, walking = false, idleUntil = 0, lastFrame = 0, poopKey = '';
+  let x = 50, target = 50, walking = false, idleUntil = 0, lastFrame = 0, poopKey = '', sceneW = 0, placed = '';
 
   host.init = function () {
     document.body.classList.add('mode-room');
@@ -48,6 +48,23 @@
       sheetTitle: app.querySelector('#sheet-title'), modalWrap: app.querySelector('.modal-wrap'), modalBox: app.querySelector('.modal-box'),
     };
     view = new UI.PetView(E.petsvg);
+    // la mascota se anima con el reloj de js/anim.js: 24 cuadros por segundo moviéndose, 12 quieta, 5 dormida
+    const pa = N.petAnim({
+      svg: () => E.petsvg.firstElementChild, view: () => view, ms: { active: 42, idle: 83, sleep: 200, egg: 63 },
+      slow: () => !E.sheetWrap.hidden || !E.modalWrap.hidden,
+      extra: (t) => { // el olorcito de las cacas
+        const st = E.poops.querySelectorAll('.stink');
+        if (!st.length) return;
+        const k = 0.5 - 0.5 * Math.cos(Math.PI * 2 * t / 1.6);
+        const tf = `translateY(${(-3 * k).toFixed(1)}px)`, op = (1 - 0.5 * k).toFixed(2);
+        st.forEach((e) => { e.style.transform = tf; e.style.opacity = op; });
+      },
+    });
+    view.onSvg = () => pa.kick();
+    // ancho de la escena en píxeles (para mover la mascota con transform, sin recalcular el diseño)
+    if (window.ResizeObserver) new ResizeObserver(() => { sceneW = E.scene.clientWidth; placePet(true); }).observe(E.scene);
+    sceneW = E.scene.clientWidth;
+    E.petbox.style.left = '0'; placePet(true);
 
     E.petsvg.addEventListener('click', () => {
       snd.unlock();
@@ -66,7 +83,7 @@
     });
     E.sheetWrap.addEventListener('click', (e) => { if (e.target === E.sheetWrap || e.target.closest('.x')) host.sheetClose(); });
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !E.sheetWrap.hidden) host.sheetClose(); });
-    requestAnimationFrame(anim);
+    wake();
   };
 
   host.panelRoot = () => E.panel;
@@ -118,14 +135,14 @@
   host.onAsk = (need) => {
     if (need && need.level === 2) { // urgente: viene corriendo al frente y salta
       target = 50; seekHop = true;
-      if (Math.abs(target - x) > 3) { walking = true; view.dir = target > x ? 1 : -1; } else { view.setAct('hop', 1000); seekHop = false; }
+      if (Math.abs(target - x) > 3) { walking = true; view.dir = target > x ? 1 : -1; wake(); } else { view.setAct('hop', 1000); seekHop = false; }
       return;
     }
     if (walking) { walking = false; view.walking = false; }
     idleUntil = performance.now() + 6000;
   };
   host.isIdle = () => !walking;
-  host.onReset = () => { E.bubble.hidden = true; x = 50; renderPoops(true); };
+  host.onReset = () => { E.bubble.hidden = true; x = 50; placePet(true); renderPoops(true); };
   host.onPetEvent = (e) => { if (e.type === 'poop') renderPoops(true); };
 
   function renderPoops(force) {
@@ -167,17 +184,31 @@
     view.render();
   };
 
+  // La mascota se ubica con transform (no con "left"): moverla no obliga a recalcular el diseño de la página.
+  function placePet(force) {
+    const px = Math.round((x / 100) * sceneW);
+    const v = `translate3d(${px}px,0,0) translateX(-50%)`;
+    if (!force && v === placed) return;
+    placed = v;
+    E.petbox.style.transform = v;
+  }
+
+  // Movimiento: a 60 cuadros por segundo sólo mientras camina; quieta, revisa 4 veces por segundo si sale a pasear.
+  let raf = 0, idleT = 0;
+  function wake() { if (!raf) { clearTimeout(idleT); idleT = 0; lastFrame = 0; raf = requestAnimationFrame(anim); } }
   function anim(t) {
+    raf = 0;
     const dt = lastFrame ? Math.min(100, t - lastFrame) / 1000 : 0;
     lastFrame = t;
     const p = C.state.pet;
+    let moving = false;
     const free = p && !p.dead && p.stage !== 'egg' && !p.sleeping && (!view.busy || seekHop);
     if (!free) {
       if (walking) { walking = false; view.walking = false; }
-      if (p && (p.stage === 'egg' || p.dead)) x += (50 - x) * Math.min(1, dt * 3);
+      if (p && (p.stage === 'egg' || p.dead) && Math.abs(50 - x) > 0.05) { x += (50 - x) * Math.min(1, dt * 3); moving = true; }
     } else {
       const now = performance.now();
-      if (!walking && now > idleUntil) {
+      if (!walking && now > idleUntil && !document.hidden) {
         target = 26 + Math.random() * 48;
         if (Math.abs(target - x) > 6) { walking = true; view.dir = target > x ? 1 : -1; }
         else idleUntil = now + 2000;
@@ -188,12 +219,14 @@
         const stepX = Math.sign(d) * sp * dt;
         if (Math.abs(stepX) >= Math.abs(d)) { x = target; walking = false; idleUntil = now + 2500 + Math.random() * 6000; if (seekHop) { seekHop = false; view.setAct('hop', 1000); } }
         else x += stepX;
+        moving = walking;
       }
       view.walking = walking;
     }
-    E.petbox.style.left = x.toFixed(2) + '%';
+    placePet();
     view.render();
-    requestAnimationFrame(anim);
+    if (moving) raf = requestAnimationFrame(anim);
+    else { lastFrame = 0; idleT = setTimeout(() => { idleT = 0; wake(); }, 250); }
   }
 
   N.roomHost = host;

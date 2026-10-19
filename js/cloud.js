@@ -22,15 +22,24 @@
     let guard = false;
     try { guard = sessionStorage.getItem('nido.cloud') === String(remote && remote.savedAt); } catch (e) {}
     if (remoteNewer && !guard) {
+      let stored = false;
       try {
         JSON.parse(remote.json);
         localStorage.setItem(C.KEY, remote.json);
-        if (localStorage.getItem(C.KEY) === remote.json) {
-          try { sessionStorage.setItem('nido.cloud', String(remote.savedAt)); } catch (e) {}
-          location.reload();
-          return;
-        }
-      } catch (e) { /* sin almacenamiento local: seguimos con lo que hay */ }
+        stored = localStorage.getItem(C.KEY) === remote.json;
+      } catch (e) { stored = false; }
+      if (stored) {
+        try { sessionStorage.setItem('nido.cloud', String(remote.savedAt)); } catch (e) {}
+        location.reload();
+        return;
+      }
+      // Sin almacenamiento local (navegador en modo privado, datos bloqueados): se carga directo la
+      // partida de la nube. Antes se empezaba de cero y esa partida nueva pisaba la guardada.
+      try {
+        const st = JSON.parse(remote.json);
+        const r = C.importState(JSON.stringify({ app: 'virtual-pet', state: st }));
+        if (!r.ok) return; // no se pudo leer: mejor no tocar lo que hay en la nube
+      } catch (e) { return; }
     }
 
     let last = 0, timer = null, writing = false;

@@ -92,6 +92,7 @@
 
   // Cada dibujo usa degradados con id; como el mismo fondo puede estar a la vez en la escena y en la tienda, los ids se renumeran en cada uso.
   let uid = 0;
+  const thumbs = {};
   const uniq = (s) => { const n = ++uid; return s.replace(/(id="|url\(#)([a-z]+)/g, `$1$2-${n}`); };
 
   N.themes = {
@@ -99,9 +100,10 @@
     sky: (id) => (ART[id] ? uniq(ART[id].sky()) : ''),
     ground: (id) => (ART[id] ? uniq(ART[id].ground()) : ''),
     // Miniatura: cielo arriba (70 %) y suelo abajo (30 %), igual que en la escena
+    // (se arma una sola vez por fondo: así la tienda no cambia de contenido cada vez que se actualiza)
     thumb(id) {
       if (!ART[id]) return ROOM_THUMB;
-      return `<span class="bgt-sky">${this.sky(id)}</span><span class="bgt-ground">${this.ground(id)}</span>`;
+      return thumbs[id] || (thumbs[id] = `<span class="bgt-sky">${this.sky(id)}</span><span class="bgt-ground">${this.ground(id)}</span>`);
     },
   };
 })();
