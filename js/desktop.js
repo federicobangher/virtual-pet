@@ -16,7 +16,11 @@
 
   const host = { kind: 'desktop' };
   let E = {}, view;
-  let wa = { x: 0, y: 0, width: 1280, height: 720 }; // área de trabajo (pantalla sin barra de tareas)
+  // Varios monitores: la mascota pasea por todos. "areas" son las áreas de trabajo de cada monitor (sin la barra
+  // de tareas), "wa" es la del monitor donde está la mascota ahora y "primary" la del monitor principal.
+  let areas = [{ x: 0, y: 0, width: 1280, height: 720 }];
+  let primary = areas[0];
+  let wa = primary;
   const pos = { x: 0, y: 0, vy: 0 };                 // esquina sup. izq. de la mascota, en coordenadas de pantalla
   let size = { w: 150, h: 125 };
   let mode = 'free';                                 // free | follow | fall | drag
@@ -33,9 +37,40 @@
   try { pref = Object.assign(pref, JSON.parse(localStorage.getItem(PREF_KEY) || '{}')); } catch (e) {}
   const savePref = () => { try { localStorage.setItem(PREF_KEY, JSON.stringify({ x: Math.round(pos.x), y: Math.round(pos.y) })); } catch (e) {} };
 
-  const floorY = () => wa.y + wa.height - size.h * 0.96;
-  const clampX = (x) => Math.max(wa.x - size.w * 0.15, Math.min(wa.x + wa.width - size.w * 0.85, x));
-  const clampY = (y) => Math.max(wa.y, Math.min(floorY(), y));
+  const inside = (a, x, y) => x >= a.x && x < a.x + a.width && y >= a.y && y < a.y + a.height;
+  // monitor que contiene el punto (o el más cercano, si cae en un hueco entre monitores)
+  function areaAt(x, y) {
+    let best = null, bd = Infinity;
+    for (const a of areas) {
+      if (inside(a, x, y)) return a;
+      const dx = Math.max(a.x - x, 0, x - (a.x + a.width)), dy = Math.max(a.y - y, 0, y - (a.y + a.height));
+      const d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = a; }
+    }
+    return best || primary;
+  }
+  const areaOfPet = (x, y) => areaAt(x + size.w / 2, y + size.h / 2);
+  const floorOf = (a) => a.y + a.height - size.h * 0.96;
+  const floorY = () => floorOf(wa);
+  // Acomoda un punto (esquina de la mascota) dentro del monitor que le corresponde
+  function clampPt(x, y) {
+    const a = areaOfPet(x, y);
+    return { x: Math.max(a.x - size.w * 0.15, Math.min(a.x + a.width - size.w * 0.85, x)), y: Math.max(a.y, Math.min(floorOf(a), y)) };
+  }
+  const clampX = (x) => clampPt(x, pos.y).x;
+  const clampY = (y) => clampPt(pos.x, y).y;
+  // rectángulo que abarca todos los monitores (la ventana puede quedar entre dos mientras cruza)
+  function unionArea() {
+    const x1 = Math.min(...areas.map((a) => a.x)), y1 = Math.min(...areas.map((a) => a.y));
+    const x2 = Math.max(...areas.map((a) => a.x + a.width)), y2 = Math.max(...areas.map((a) => a.y + a.height));
+    return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+  }
+  function setAreas(info) {
+    if (!info) return;
+    primary = info.workArea || primary;
+    areas = Array.isArray(info.areas) && info.areas.length ? info.areas : [primary];
+    wa = areaOfPet(pos.x, pos.y);
+  }
 
   function setIgnore(v) {
     if (v === ignoring) return;
@@ -70,7 +105,8 @@
   function layout() {
     const cw = Math.max(size.w + 40, MINW), ch = size.h + BUB + TAG;
     let x = pos.x - (cw - size.w) / 2, y = pos.y - BUB;
-    x = Math.max(wa.x, Math.min(wa.x + wa.width - cw, x));
+    const U = unionArea();
+    x = Math.max(U.x, Math.min(U.x + U.width - cw, x));
     y = Math.max(wa.y, Math.min(wa.y + wa.height - ch + TAG, y));
     let r = { x, y, w: cw, h: ch };
     if (cardOpen && cardPos) {
@@ -117,11 +153,13 @@
       layout();
     }).observe(E.card);
 
-    wa = D.screenInfo().workArea;
+    setAreas(D.screenInfo());
+    wa = primary;
     E.card.style.maxHeight = (wa.height - 16) + 'px';
     measure();
-    pos.x = pref.x != null ? clampX(pref.x) : wa.x + wa.width - size.w - 180;
-    pos.y = pref.y != null ? clampY(pref.y) : floorY();
+    if (pref.x != null && pref.y != null) { const c = clampPt(pref.x, pref.y); pos.x = c.x; pos.y = c.y; } // (si ese monitor ya no está, va al más cercano)
+    else { pos.x = primary.x + primary.width - size.w - 180; pos.y = floorOf(primary); }
+    wa = areaOfPet(pos.x, pos.y);
     const p0 = C.state.pet;
     if (p0 && p0.stage === 'egg' && pos.y < floorY() - 2) mode = 'fall';
     layout();
@@ -136,7 +174,7 @@
     E.hit.addEventListener('pointermove', (e) => {
       if (!drag) return;
       if (!drag.moved && Math.hypot(e.screenX - drag.sx, e.screenY - drag.sy) > 6) { drag.moved = true; mode = 'drag'; E.pet.classList.add('dragging'); }
-      if (drag.moved) { pos.x = clampX(e.screenX - drag.ox); pos.y = clampY(e.screenY - drag.oy); layout(); }
+      if (drag.moved) { const c = clampPt(e.screenX - drag.ox, e.screenY - drag.oy); pos.x = c.x; pos.y = c.y; wa = areaOfPet(pos.x, pos.y); layout(); }
     });
     const endDrag = () => {
       if (!drag) return;
@@ -184,7 +222,15 @@
       if (p.probe) probe(p.x - bounds.x, p.y - bounds.y);
       if (C.state.settings.follow) wake();
     });
-    D.onWorkArea((w) => { wa = w; E.card.style.maxHeight = (wa.height - 16) + 'px'; pos.x = clampX(pos.x); pos.y = clampY(pos.y); if (cardOpen) cardPos = clampCard(cardPos.x, cardPos.y); layout(); });
+    // se conectó o desconectó un monitor, o cambió la resolución
+    D.onWorkArea((w) => {
+      setAreas(w.areas ? w : { workArea: w, areas: [w] });
+      const c = clampPt(pos.x, pos.y); pos.x = c.x; pos.y = c.y; wa = areaOfPet(pos.x, pos.y);
+      target = null;
+      E.card.style.maxHeight = (wa.height - 16) + 'px';
+      if (cardOpen && cardPos) cardPos = clampCard(cardPos.x, cardPos.y);
+      layout();
+    });
     D.onPoopClean((id) => { const r = C.act.clean(id); if (r.ok) snd.play('good'); syncPoops(true); });
     D.onCommand((cmd) => {
       if (cmd === 'panel') { show(); openCard(); }
@@ -193,9 +239,14 @@
       else if (cmd === 'show') hideAll(false);
       else if (cmd === 'call') {
         show();
-        pos.x = wa.x + wa.width / 2 - size.w / 2; pos.y = wa.y + wa.height / 2 - size.h / 2;
-        mode = C.state.pet && C.state.pet.stage === 'egg' ? 'fall' : 'free';
-        target = null; idleUntil = performance.now() + 3000; pos.vy = 0; layout(); wake();
+        // aparece en el centro del monitor donde está el mouse
+        const go = (a) => {
+          wa = a;
+          pos.x = a.x + a.width / 2 - size.w / 2; pos.y = a.y + a.height / 2 - size.h / 2;
+          mode = C.state.pet && C.state.pet.stage === 'egg' ? 'fall' : 'free';
+          target = null; idleUntil = performance.now() + 3000; pos.vy = 0; layout(); wake();
+        };
+        if (D.getCursor) D.getCursor().then((c) => go(c ? areaAt(c.x, c.y) : primary)).catch(() => go(primary)); else go(primary);
       } else if (cmd === 'onTop') { C.act.setting('onTop', !C.state.settings.onTop); D.setOnTop(C.state.settings.onTop); syncTray(); }
       else if (cmd === 'follow' || cmd === 'sound' || cmd === 'wander' || cmd === 'notify') { C.act.setting(cmd, !C.state.settings[cmd]); syncTray(); wake(); }
     });
@@ -339,7 +390,7 @@
     D.getCursor().then((c) => {
       if (!c || cardOpen) return;
       const side = pos.x + size.w / 2 < c.x ? -1 : 1;
-      target = { x: clampX(c.x - size.w / 2 + side * size.w * 0.65), y: clampY(c.y - size.h * 0.6) };
+      target = clampPt(c.x - size.w / 2 + side * size.w * 0.65, c.y - size.h * 0.6);
       seek = { need, action };
       idleUntil = 0;
       wake();
@@ -350,7 +401,7 @@
     try { localStorage.removeItem(PREF_KEY); } catch (e) {}
     E.bubble.hidden = true;
     measure();
-    pos.x = wa.x + wa.width - size.w - 180; pos.y = floorY(); mode = 'free'; target = null;
+    wa = primary; pos.x = primary.x + primary.width - size.w - 180; pos.y = floorOf(primary); mode = 'free'; target = null;
     syncPoops(true); syncTray(); layout();
   };
   host.onSetting = (k, v) => { if (k === 'autostart') D.setAutostart(v); if (k === 'onTop') D.setOnTop(v); syncTray(); wake(); };
@@ -393,12 +444,19 @@
     return v;
   }
   function pickTarget() {
-    const fy = floorY();
-    let x, y;
-    if (Math.random() < 0.6) { x = wa.x + Math.random() * (wa.width - size.w); y = wa.y + Math.random() * (fy - wa.y); }
-    else { x = pos.x + (Math.random() - 0.5) * 500; y = pos.y + (Math.random() - 0.5) * 360; }
-    if (Math.random() < 0.25) y = fy; // de vez en cuando vuelve a la barra de tareas
-    return { x: clampX(x), y: clampY(y) };
+    let x, y, a = wa;
+    if (Math.random() < 0.6) {
+      // un lugar cualquiera de cualquier monitor (los más grandes, un poco más seguido)
+      if (areas.length > 1) {
+        const tot = areas.reduce((n, b) => n + b.width * b.height, 0);
+        let r = Math.random() * tot;
+        a = areas.find((b) => (r -= b.width * b.height) < 0) || wa;
+      }
+      x = a.x + Math.random() * (a.width - size.w); y = a.y + Math.random() * (floorOf(a) - a.y);
+    } else { x = pos.x + (Math.random() - 0.5) * 500; y = pos.y + (Math.random() - 0.5) * 360; }
+    const c = clampPt(x, y);
+    if (Math.random() < 0.25) c.y = floorOf(areaOfPet(c.x, c.y)); // de vez en cuando vuelve a la barra de tareas
+    return c;
   }
   function moveTowards(tx, ty, speed, dt) {
     const dx = tx - pos.x, dy = ty - pos.y, dist = Math.hypot(dx, dy);
@@ -443,7 +501,7 @@
       if (pos.y >= fy) { pos.y = fy; pos.vy = 0; mode = 'free'; savePref(); }
     } else if (mode === 'follow') {
       const side = pos.x + size.w / 2 < cursor.x ? -1 : 1; // se queda al costado del puntero, no debajo
-      const tx = clampX(cursor.x - size.w / 2 + side * size.w * 0.6), ty = clampY(cursor.y - size.h * 0.7);
+      const { x: tx, y: ty } = clampPt(cursor.x - size.w / 2 + side * size.w * 0.6, cursor.y - size.h * 0.7);
       const dist = Math.hypot(tx - pos.x, ty - pos.y);
       if (dist > 26 || (dist > 4 && walkingPrev)) { moveTowards(tx, ty, baseSpeed(p) * 2.2, dt); walking = true; moved = true; }
       flying = canFly(p) && pos.y < fy - 20;
@@ -471,11 +529,11 @@
       if (!walking) flying = canFly(p) && !p.sleeping && !p.dead && pos.y < fy - 20;
     }
     walkingPrev = walking;
-    if (moved) layout();
+    if (moved) { wa = areaOfPet(pos.x, pos.y); layout(); }
     return moved;
   }
 
-  host.debug = () => ({ idleUntil: Math.round(idleUntil - performance.now()), pos: { x: Math.round(pos.x), y: Math.round(pos.y) }, target, mode, running, card: cardOpen, temp: view.temp, bounds, wa, fy: Math.round(floorY()) });
+  host.debug = () => ({ idleUntil: Math.round(idleUntil - performance.now()), pos: { x: Math.round(pos.x), y: Math.round(pos.y) }, target, mode, running, card: cardOpen, temp: view.temp, bounds, wa, fy: Math.round(floorY()), areas });
   /* ---------- animación "a cuadros" (js/anim.js) ----------
      En vez de dejar que Chromium anime a 60 cuadros por segundo, la mascota se anima con un reloj propio:
      10 cuadros por segundo caminando, 5 quieta y 2,5 dormida. Se ve igual de viva y la CPU casi ni se entera. */

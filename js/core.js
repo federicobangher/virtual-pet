@@ -3,7 +3,7 @@
   'use strict';
   const N = (window.N = window.N || {});
   const MIN = 60e3, HOUR = 3600e3, DAY = 24 * HOUR;
-  N.APP = { name: 'Virtual Pet', version: '1.7.3', author: 'Facundo Bangher' };
+  N.APP = { name: 'Virtual Pet', version: '1.7.4', author: 'Facundo Bangher' };
 
   const SPECIES = {
     dragon: { name: 'Dragón', fav: 'Carne asada', egg: 'Huevo escamado', hint: 'Comilón: le da hambre seguido' },
@@ -80,7 +80,8 @@
     // (despierta: la comida pide a las ~4 h, la diversión a las ~5 h, la higiene a las ~7 h y el sueño a las ~8 h;
     //  de noche se cansa antes y duerme toda la noche)
     awake: { food: 13, fun: 12, hygiene: 8, energy: 8 },
-    asleep: { food: 3.5, fun: 1.5, hygiene: 2, energy: -14 },
+    // durmiendo recupera la energía en 2 a 3 horas (de noche igual sigue durmiendo hasta la mañana)
+    asleep: { food: 3.5, fun: 1.5, hygiene: 2, energy: -30 },
     poopHygiene: 4,
     // sin ningún cuidado se muere en ~1 día (nunca antes de ~20 h)
     healthDmg: { sick: 2.5, food: 2.5, energy: 1.5, hygiene: 1.5, fun: 1 },
@@ -630,7 +631,7 @@
       const bored = p.fun < 60;
       p.fun = clamp(p.fun + 15 + ratio * 20);
       // jugar cansa, da hambre y ensucia
-      p.energy = clamp(p.energy - 12);
+      p.energy = clamp(p.energy - 10);
       p.food = clamp(p.food - 6);
       p.hygiene = clamp(p.hygiene - 5);
       S.coins += coins;
