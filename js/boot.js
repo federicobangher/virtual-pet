@@ -5,7 +5,8 @@
   const desktop = !!window.petDesktop;
   if (desktop) document.documentElement.classList.add('desk');
   N.ui.start(desktop ? N.desktopHost : N.roomHost);
-  if (!desktop && 'serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  // (en la app nativa de Android no hace falta: los archivos ya vienen adentro de la app)
+  if (!desktop && !(N.platform && N.platform.native) && 'serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').then((reg) => {
       // cada vez que se vuelve a la app, fijarse si hay una versión nueva
       document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });

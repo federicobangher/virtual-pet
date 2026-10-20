@@ -1,23 +1,40 @@
 /* Virtual Pet — animación de la mascota "a cuadros", compartida por el escritorio y el celular.
-   En vez de dejar que el navegador anime el dibujo 60 veces por segundo con CSS (que obliga a redibujar
-   la mascota entera en cada cuadro), un reloj propio mueve sólo las partes que cambian, unas pocas veces
-   por segundo. Se ve igual de viva y gasta mucha menos batería y CPU.
-   N.petAnim({ svg: () => elementoSVG|null, view: () => PetView, ms: { active, idle, sleep, egg }, extra(t) }) */
+   En vez de dejar que el navegador anime el dibujo 60 (o 120) veces por segundo con CSS, que obliga a redibujar
+   la mascota entera en cada cuadro, un reloj propio mueve sólo las partes que cambian unas pocas veces por
+   segundo. Se ve igual de viva y gasta mucha menos batería y CPU.
+
+   N.petAnim({
+     svg: () => elementoSVG | null,   // el dibujo a animar (null: no hay nada que animar ahora)
+     view: () => PetView,              // para saber cuándo empezó un gesto
+     ms: { active, idle, sleep, egg }, // milisegundos entre cuadros según lo que esté haciendo
+     slow: () => bool,                 // tapada por una ventana: más despacio
+     saver: () => bool,                // ahorro de batería: todavía más despacio
+     extra(t),                         // algo más para animar en el mismo cuadro (las cacas, por ejemplo)
+     autoStop: true,                   // se apaga sola cuando el dibujo desaparece (ventanas, juegos)
+   }) → { kick(), stop() }
+
+   En segundo plano (app minimizada, pantalla apagada) no se dibuja nada: el reloj se detiene y vuelve
+   a arrancar cuando la app se vuelve a ver. */
 (function () {
   'use strict';
   const N = (window.N = window.N || {});
   const TAU = Math.PI * 2;
+  const BLINK = 4.2, BLINK_AT = 4.0, BLINK_END = 4.18;
   const wave = (t, per) => 0.5 - 0.5 * Math.cos(TAU * t / per); // 0..1..0
-  const reduced = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } };
+  let reducedMq = null;
+  try { reducedMq = window.matchMedia('(prefers-reduced-motion: reduce)'); } catch (e) { /* sin matchMedia */ }
+  const reduced = () => !!(reducedMq && reducedMq.matches);
 
   N.petAnim = function (o) {
     const MS = Object.assign({ active: 100, idle: 200, sleep: 400, egg: 125 }, o.ms || {});
     let qc = { svg: null, q: {} };
+    let seen = false, misses = 0, stopped = false;
 
     function animate(t) {
       const svg = o.svg();
-      if (!svg) return 300;
-      const view = o.view();
+      if (!svg) return 0;
+      seen = true; misses = 0;
+      const view = o.view ? o.view() : null;
       if (qc.svg !== svg) qc = { svg, q: {} };
       const Q = (sel) => qc.q[sel] || (qc.q[sel] = svg.querySelectorAll(sel));
       const cl = svg.classList;
@@ -29,11 +46,11 @@
         let r = 0;
         if (ph > 0.7) { const k = (ph - 0.7) / 0.3; r = Math.sin(k * Math.PI * 3) * 7 * (1 - k); }
         set('.wobble', r ? `rotate(${r.toFixed(1)}deg)` : '');
-        return ph > 0.66 ? MS.egg : Math.min(400, (0.7 - ph) * per * 1000); // quieto entre bamboleos
+        return ph > 0.66 ? MS.egg : Math.min(1500, (0.7 - ph) * per * 1000); // quieto entre bamboleos: no se dibuja
       }
       const walk = cl.contains('walking'), fly = cl.contains('flying'), sleep = cl.contains('mood-sleep'), dead = cl.contains('mood-dead');
       const at = (performance.now() - (view ? view.actT0 : 0)) / 1000; // tiempo desde que empezó el gesto
-      const gesture = cl.contains('act-special') || cl.contains('act-stretch') || cl.contains('act-hop') || cl.contains('act-scratch') || cl.contains('mood-yawn');
+      const gesture = cl.contains('act-special') || cl.contains('act-stretch') || cl.contains('act-hop') || cl.contains('act-scratch') || cl.contains('mood-yawn') || cl.contains('act-look');
       if (cl.contains('act-stretch')) { const k = Math.sin(Math.PI * Math.min(1, at / 1.5)); set('.bob', `scale(${(1 + 0.13 * k).toFixed(3)}, ${(1 - 0.12 * k).toFixed(3)})`); }
       else if (cl.contains('act-hop')) set('.bob', `translateY(${(-24 * Math.abs(Math.sin(Math.PI * at / 0.5))).toFixed(1)}px)`);
       else if (walk) set('.bob', `translateY(${(-6 * Math.abs(Math.sin(Math.PI * t / 0.42))).toFixed(1)}px)`);
@@ -51,8 +68,8 @@
       if (sleep || dead) set('.wing', '');
       else set('.wing', fly ? `rotate(${(12 - 44 * wave(t, 0.3)).toFixed(1)}deg)` : `rotate(${(-9 * wave(t, walk ? 1 : 2.6)).toFixed(1)}deg)`);
       set('.tail', `rotate(${(-7 * wave(t, sleep ? 4 : 2.2)).toFixed(1)}deg)`);
-      const bp = t % 4.2;
-      set('.eyes.blink', bp > 4.0 && bp < 4.18 ? 'scaleY(0.1)' : '');
+      const bp = t % BLINK;
+      set('.eyes.blink', bp > BLINK_AT && bp < BLINK_END ? 'scaleY(0.1)' : '');
       if (cl.contains('act-scratch')) set('.head', `rotate(${(9 * Math.sin(Math.PI * Math.min(1, at / 1.5))).toFixed(1)}deg)`);
       else if (cl.contains('mood-yawn')) set('.head', `rotate(${(-7 * Math.sin(Math.PI * Math.min(1, at / 1.6))).toFixed(1)}deg)`);
       else if (cl.contains('mood-happy')) set('.head', `rotate(${(-5 * Math.sin(TAU * t / 1.6)).toFixed(1)}deg)`);
@@ -65,7 +82,8 @@
       Q('.zzz:not(.notes) .z').forEach((z, i) => {
         const ph = ((t + i * 0.8) % 2.4) / 2.4;
         fade(z, (0.5 + 0.5 * (ph < 0.25 ? ph / 0.25 : 1 - (ph - 0.25) / 0.75)).toFixed(2)); // nunca se borran: se ven sobre cualquier fondo
-        z.style.transform = `translate(0px, ${(4 - 18 * ph).toFixed(1)}px) scale(${(0.7 + 0.4 * ph).toFixed(2)})`;
+        const tf = `translate(0px, ${(4 - 18 * ph).toFixed(1)}px) scale(${(0.7 + 0.4 * ph).toFixed(2)})`;
+        if (z.style.transform !== tf) z.style.transform = tf;
       });
       if (cl.contains('act-special')) {
         if (cl.contains('sp-dragon')) {
@@ -95,28 +113,56 @@
       set('.halo', `translateY(${(-7 * wave(t, 3)).toFixed(1)}px)`);
       set('.tear', `translateY(${(14 * ((t % 2) / 2)).toFixed(1)}px)`);
       Q('.twinkle').forEach((e, i) => { const k = wave(t + i * 0.6, 1.8); e.style.transform = `scale(${(0.4 + 0.7 * k).toFixed(2)})`; fade(e, (0.3 + 0.7 * k).toFixed(2)); });
-      return sleep || dead ? MS.sleep : walk || fly || gesture || cl.contains('mood-eat') ? MS.active : MS.idle;
+      let next = sleep || dead ? MS.sleep : walk || fly || gesture || cl.contains('mood-eat') ? MS.active : MS.idle;
+      // que el parpadeo no se pierda entre dos cuadros: un cuadro justo al cerrar los ojos y otro al abrirlos
+      if (!sleep && !dead && Q('.eyes.blink').length) {
+        if (bp > BLINK_AT && bp < BLINK_END) next = Math.min(next, (BLINK_END - bp) * 1000 + 15);
+        else { const toBlink = ((BLINK_AT - bp + BLINK) % BLINK) * 1000 + 15; if (toBlink < next) next = toBlink; }
+      }
+      return next;
     }
 
     const t0 = performance.now();
-    let timer = 0;
+    let timer = 0, waitingVisible = false;
+    function onVisible() {
+      if (document.hidden || stopped) return;
+      document.removeEventListener('visibilitychange', onVisible);
+      waitingVisible = false;
+      loop();
+    }
     function loop() {
+      clearTimeout(timer); timer = 0;
+      if (stopped) return;
+      // en segundo plano no se dibuja nada: se espera a que la app se vuelva a ver (sin despertar al procesador)
+      if (document.hidden) {
+        if (!waitingVisible) { waitingVisible = true; document.addEventListener('visibilitychange', onVisible); }
+        return;
+      }
       let next = 300;
       const t = (performance.now() - t0) / 1000;
       try {
-        if (o.pauseHidden && document.hidden) next = 1000; // en segundo plano no se dibuja nada
-        // movimiento reducido (accesibilidad del celular): la mascota queda quieta, con las Z de dormir a la vista
-        else if (o.respectReduced && reduced()) next = 1000;
+        // movimiento reducido (accesibilidad): la mascota queda quieta, con las Z de dormir a la vista
+        if (reduced()) { animate(0); next = 2000; }
         else {
           next = animate(t);
-          if (o.extra) o.extra(t);
-          if (o.slow && o.slow()) next = Math.max(next, 250); // tapada por una ventana: más despacio
+          if (!next) { // no hay dibujo
+            if (o.autoStop && (seen || ++misses > 20)) { stopped = true; return; }
+            next = 300;
+          } else {
+            if (o.extra) o.extra(t);
+            if (o.slow && o.slow()) next = Math.max(next, 250);
+            if (o.saver && o.saver()) next = Math.max(next * 2, 160);
+          }
         }
       } catch (e) { /* seguir animando igual */ }
       timer = setTimeout(loop, next);
     }
     loop();
-    // para que un cambio de dibujo (otro gesto, otra cara) se anime enseguida y no al cuadro siguiente
-    return { kick() { clearTimeout(timer); loop(); } };
+    // kick: para que un cambio de dibujo (otro gesto, otra cara) se anime enseguida y no al cuadro siguiente
+    return {
+      kick() { if (stopped) return; if (!waitingVisible) loop(); },
+      stop() { stopped = true; clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible); },
+      get running() { return !stopped; },
+    };
   };
 })();

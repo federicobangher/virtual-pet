@@ -120,12 +120,10 @@
       bounds = b;
       D.setBounds(b);
     }
-    E.pet.style.left = Math.round(pos.x - b.x) + 'px';
-    E.pet.style.top = Math.round(pos.y - b.y) + 'px';
-    if (cardOpen && cardPos) {
-      E.card.style.left = Math.round(cardPos.x - b.x) + 'px';
-      E.card.style.top = Math.round(cardPos.y - b.y) + 'px';
-    }
+    // (mientras camina se mueve la ventana, no el dibujo: sólo se toca el estilo si de verdad cambió)
+    const sl = (el, k, v) => { v = Math.round(v) + 'px'; if (el.style[k] !== v) el.style[k] = v; };
+    sl(E.pet, 'left', pos.x - b.x); sl(E.pet, 'top', pos.y - b.y);
+    if (cardOpen && cardPos) { sl(E.card, 'left', cardPos.x - b.x); sl(E.card, 'top', cardPos.y - b.y); }
   }
 
   host.init = function () {
@@ -261,7 +259,7 @@
     hiddenAll = v;
     document.getElementById('app').style.visibility = v ? 'hidden' : '';
     if (v) setIgnore(true);
-    D.poops(v ? [] : currentPoops());
+    showPoops(v ? [] : currentPoops());
     syncTray();
   }
   function syncTray() {
@@ -417,7 +415,43 @@
     const key = list.map((q) => q.id).join(',');
     if (!force && key === poopKey) return;
     poopKey = key;
-    if (!hiddenAll) D.poops(list);
+    if (!hiddenAll) showPoops(list);
+  }
+  /* La franja de cacas es una ventanita aparte (abajo de la pantalla). Antes era otra ventana de Electron con
+     su propio proceso (unos 60-100 MB más de memoria mientras hubiera cacas). Ahora la abre esta misma página
+     con window.open: comparte el proceso y se dibuja desde acá, sin mensajes de ida y vuelta.
+     Si por algún motivo no se puede abrir, se usa la forma vieja (D.poops). */
+  let strip = null, stripIgnoring = true, useIpc = !D.poopsChild;
+  const POOP_CSS = 'html,body{margin:0;height:100%;background:transparent;overflow:hidden;user-select:none}' +
+    'button{position:absolute;bottom:4px;width:44px;height:38px;padding:0;border:0;background:none;cursor:pointer;transform:translateX(-50%)}' +
+    'button svg{width:100%;height:100%;display:block}';
+  function showPoops(list) {
+    if (useIpc) { D.poops(list); return; }
+    if (!list.length) { if (strip && !strip.closed) strip.close(); strip = null; return; }
+    if (!strip || strip.closed) {
+      try { strip = window.open('', 'vpet-poops', ''); } catch (e) { strip = null; }
+      if (!strip || !strip.document) { useIpc = true; strip = null; D.poops(list); return; }
+      const d = strip.document;
+      d.title = 'Virtual Pet';
+      const st = d.createElement('style'); st.textContent = POOP_CSS; d.head.appendChild(st);
+      stripIgnoring = true;
+      d.addEventListener('mousemove', (e) => {
+        const el = d.elementFromPoint(e.clientX, e.clientY);
+        const over = !!(el && el.closest && el.closest('button'));
+        if (over === !stripIgnoring) return;
+        stripIgnoring = !over; D.poopsIgnore(stripIgnoring);
+      });
+      d.addEventListener('mouseleave', () => { if (!stripIgnoring) { stripIgnoring = true; D.poopsIgnore(true); } });
+      d.addEventListener('click', (e) => {
+        const b = e.target.closest && e.target.closest('button'); if (!b) return;
+        snd.unlock();
+        const r = C.act.clean(b.dataset.id);
+        if (r.ok) snd.play('good');
+        b.remove(); syncPoops(true);
+      });
+    }
+    const svg = N.art.poopSVG().replace(/ class="stink"/, ' class="stink" style="opacity:.8"');
+    strip.document.body.innerHTML = list.map((q) => `<button type="button" data-id="${q.id}" title="Limpiar" style="left:${(4 + q.x * 92).toFixed(1)}%">${svg}</button>`).join('');
   }
 
   host.update = function () {
@@ -430,7 +464,7 @@
     measure();
     if (before !== size.w) layout();
     view.render();
-    if (p && !p.sleeping && !p.dead) wake();
+    if (p && !p.sleeping && !p.dead && !running && (C.state.settings.wander || C.state.settings.follow || mode === 'fall' || target)) wake();
   };
 
   /* ---------- movimiento ---------- */
@@ -445,7 +479,7 @@
   }
   function pickTarget() {
     let x, y, a = wa;
-    if (Math.random() < 0.6) {
+    if (Math.random() < 0.35) { // a veces cruza la pantalla; casi siempre pasea cerca, como Neko
       // un lugar cualquiera de cualquier monitor (los más grandes, un poco más seguido)
       if (areas.length > 1) {
         const tot = areas.reduce((n, b) => n + b.width * b.height, 0);
@@ -453,12 +487,14 @@
         a = areas.find((b) => (r -= b.width * b.height) < 0) || wa;
       }
       x = a.x + Math.random() * (a.width - size.w); y = a.y + Math.random() * (floorOf(a) - a.y);
-    } else { x = pos.x + (Math.random() - 0.5) * 500; y = pos.y + (Math.random() - 0.5) * 360; }
+    } else { x = pos.x + (Math.random() - 0.5) * 520; y = pos.y + (Math.random() - 0.5) * 300; }
     const c = clampPt(x, y);
     if (Math.random() < 0.25) c.y = floorOf(areaOfPet(c.x, c.y)); // de vez en cuando vuelve a la barra de tareas
     return c;
   }
+  let curSpeed = 100;
   function moveTowards(tx, ty, speed, dt) {
+    curSpeed = speed;
     const dx = tx - pos.x, dy = ty - pos.y, dist = Math.hypot(dx, dy);
     if (dist < 1) return true;
     const st = Math.min(dist, speed * dt);
@@ -468,7 +504,8 @@
   }
 
   // Ciclo de movimiento: corre a ~30 cuadros por segundo sólo mientras algo se mueve.
-  // Quieta, revisa 4 veces por segundo si tiene que salir a pasear.
+  // Quieta, no revisa nada a cada rato: se despierta cuando le toca salir a pasear (o cuando algo cambia:
+  // un clic, un ajuste, el reloj del juego, que la llama cada segundo).
   let timer = 0, running = false;
   function wake() { if (!running) { running = true; clearTimeout(timer); lastFrame = 0; timer = setTimeout(tick, 0); } }
   function tick() {
@@ -479,8 +516,16 @@
     view.walking = walking && !flying;
     view.flying = flying;
     view.render();
-    if (active) timer = setTimeout(tick, 33);
-    else { running = false; lastFrame = 0; timer = setTimeout(() => { if (!running) { running = true; tick(); } }, 250); }
+    // paso de ~4 píxeles: a 15 cuadros por segundo si va despacio (tortuga, bebé), hasta 30 si vuela
+    if (active) timer = setTimeout(tick, mode === 'drag' || mode === 'fall' ? 33 : Math.max(33, Math.min(66, 4000 / Math.max(1, curSpeed))));
+    else {
+      running = false; lastFrame = 0;
+      // si no va a salir a pasear (paseo apagado, durmiendo, con el panel abierto) espera 2 s; si no, hasta el próximo paseo
+      const p = C.state.pet, S = C.state.settings;
+      const still = !p || p.dead || p.sleeping || p.stage === 'egg' || cardOpen || hiddenAll || (!S.wander && !S.follow && !seek);
+      const wait = still ? 2000 : Math.max(250, Math.min(2000, idleUntil - t));
+      timer = setTimeout(() => { if (!running) { running = true; tick(); } }, wait);
+    }
   }
 
   function step(dt, now) {
@@ -521,7 +566,8 @@
               view.setAct('hop', 1000);
               host.bubble('¡Ey! ' + sk.need.text, 7000, true, sk.action);
             }
-            idleUntil = now + (p.species === 'turtle' ? 5000 : 2500) + Math.random() * 9000;
+            // descansa un rato antes de volver a salir (cuanto más quieta, menos consume)
+            idleUntil = now + (p.species === 'turtle' ? 8000 : 4000) + Math.random() * 14000;
             savePref();
           }
         }
@@ -536,10 +582,11 @@
   host.debug = () => ({ idleUntil: Math.round(idleUntil - performance.now()), pos: { x: Math.round(pos.x), y: Math.round(pos.y) }, target, mode, running, card: cardOpen, temp: view.temp, bounds, wa, fy: Math.round(floorY()), areas });
   /* ---------- animación "a cuadros" (js/anim.js) ----------
      En vez de dejar que Chromium anime a 60 cuadros por segundo, la mascota se anima con un reloj propio:
-     10 cuadros por segundo caminando, 5 quieta y 2,5 dormida. Se ve igual de viva y la CPU casi ni se entera. */
+     10 cuadros por segundo caminando, 4 quieta y 2 dormida. Se ve igual de viva y la CPU casi ni se entera. */
   let petAnim = null;
   function startAnim() {
-    petAnim = N.petAnim({ svg: () => (hiddenAll ? null : E.svg && E.svg.firstElementChild), view: () => view, ms: { active: 100, idle: 200, sleep: 400, egg: 125 } });
+    // con el panel abierto la ventana es grande: cada cuadro cuesta más, así que la mascota se anima más despacio
+    petAnim = N.petAnim({ svg: () => (hiddenAll ? null : E.svg && E.svg.firstElementChild), view: () => view, ms: { active: 100, idle: 250, sleep: 500, egg: 125 }, slow: () => cardOpen, saver: () => !!C.state.settings.saver });
     view.onSvg = () => petAnim.kick();
   }
 

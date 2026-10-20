@@ -48,6 +48,7 @@
 
     function frame(now) {
       if (!running) return;
+      if (now - last < 14) { raf = requestAnimationFrame(frame); return; } // pantallas de 90/120 Hz: ~60 cuadros alcanzan
       const raw = Math.max(0, now - last), dt = Math.min(50, raw); last = now;
       const el = (played += Math.min(250, raw)); // tiempo jugado (si la app pasa a segundo plano, el reloj se pausa)
       const speedUp = 1 + el / DUR;
@@ -99,8 +100,7 @@
     root.innerHTML = `<div class="g-guess"><div class="g-top"><span>Ronda <b class="rd">1</b>/${ROUNDS}</span><span>Aciertos <b class="sc">0</b></span></div>
       <div class="gg-pet"></div><p class="gg-msg">¿Para qué lado va a mirar?</p>
       <div class="row gg-btns"><button type="button" class="btn big" data-d="-1">${N.ui.ic('back')} Izquierda</button><button type="button" class="btn big" data-d="1">Derecha ${N.ui.ic('back', 'flipx')}</button></div></div>`;
-    const view = new N.ui.PetView(root.querySelector('.gg-pet'));
-    view.render(true);
+    const view = N.ui.liveView(root.querySelector('.gg-pet'));
     const msg = root.querySelector('.gg-msg');
     root.querySelector('.gg-btns').addEventListener('click', (e) => {
       const b = e.target.closest('[data-d]');
@@ -198,6 +198,7 @@
     });
     function frame(now) {
       if (!running) return;
+      if (now - last < 14) { raf = requestAnimationFrame(frame); return; }
       const raw = Math.max(0, now - last), dt = Math.min(50, raw); last = now;
       const el = (played += Math.min(250, raw)); // tiempo jugado (si la app pasa a segundo plano, el reloj se pausa)
       spawn -= dt;
@@ -227,5 +228,100 @@
     return { stop() { running = false; cancelAnimationFrame(raf); } };
   }
 
-  N.games = { catch: catchGame, guess: guessGame, memory: memoryGame, bubbles: bubblesGame };
+  /* ---------- Simón dice (se desbloquea con monedas) ---------- */
+  function simonGame(root, finish) {
+    const PADS = [{ ic: 'food' }, { ic: 'sleep' }, { ic: 'bath' }, { ic: 'play' }];
+    const MAXR = 10;
+    root.innerHTML = `<div class="g-simon"><div class="g-top"><span>Ronda <b class="rd">1</b></span><span>Récord <b class="best">0</b></span></div>
+      <div class="simon">${PADS.map((p, i) => `<button type="button" class="s${i}" data-i="${i}" aria-label="Botón ${i + 1}" disabled>${N.ui.ic(p.ic)}</button>`).join('')}</div>
+      <p class="gg-msg">Mirá bien…</p></div>`;
+    const btns = [...root.querySelectorAll('.simon button')], msg = root.querySelector('.gg-msg');
+    let seq = [], pos = 0, alive = true, timers = [], best = 0;
+    const later = (fn, ms) => { const t = setTimeout(() => { if (alive) fn(); }, ms); timers.push(t); };
+    const light = (i, ms) => { btns[i].classList.add('on'); snd.play('note', i); later(() => btns[i].classList.remove('on'), ms); };
+    const lock = (v) => btns.forEach((b) => { b.disabled = v; });
+    function play() {
+      lock(true); msg.textContent = 'Mirá bien…';
+      root.querySelector('.rd').textContent = seq.length;
+      const step = Math.max(320, 620 - seq.length * 30);
+      seq.forEach((i, k) => later(() => light(i, step * 0.6), 500 + k * step));
+      later(() => { lock(false); pos = 0; msg.textContent = '¡Ahora vos!'; }, 500 + seq.length * step);
+    }
+    function next() { seq.push(Math.floor(Math.random() * 4)); play(); }
+    root.querySelector('.simon').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b || b.disabled || !alive) return;
+      const i = +b.dataset.i;
+      light(i, 220);
+      if (i !== seq[pos]) {
+        lock(true); snd.play('bad'); msg.textContent = '¡Uy! Era otro';
+        const score = seq.length - 1;
+        later(() => finish(Math.min(score, MAXR), MAXR), 900);
+        return;
+      }
+      pos++;
+      if (pos === seq.length) {
+        best = seq.length; root.querySelector('.best').textContent = best;
+        lock(true); msg.textContent = '¡Bien!';
+        if (seq.length >= MAXR) { snd.play('happy'); later(() => finish(MAXR, MAXR), 700); return; }
+        later(next, 700);
+      }
+    });
+    next();
+    return { stop() { alive = false; timers.forEach(clearTimeout); } };
+  }
+
+  /* ---------- Salto (se desbloquea con monedas) ---------- */
+  function jumpGame(root, finish) {
+    const S0 = N.core.state, p = S0.pet;
+    root.innerHTML = `<div class="g-catch"><div class="g-top"><span>Saltos <b class="sc">0</b></span><span>Vidas <b class="lv">3</b></span><span>Tiempo <b class="tm">25</b></span></div>
+      <canvas class="g-canvas" width="360" height="420" aria-label="Juego: saltá las piedras"></canvas>
+      <p class="g-hint">Tocá la pantalla (o la barra espaciadora) para saltar.</p></div>`;
+    const cv = root.querySelector('canvas'), g = cv.getContext('2d');
+    const { W, H } = hiDPI(cv), DUR = 25000, MAX = 20, GY = H - 70;
+    const showSc = show(root.querySelector('.sc')), showTm = show(root.querySelector('.tm')), showLv = show(root.querySelector('.lv'));
+    const petImg = imgFromSVG(art.petSVG({ species: p ? p.species : 'dragon', stage: p && p.stage !== 'egg' ? p.stage : 'baby', variant: p ? p.variant : 'normal', mood: 'happy', dir: 1, accessory: S0.wearing, walking: true }).replace('<svg ', '<svg width="240" height="200" '));
+    const rockImg = imgFromSVG('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 40"><path d="M4 38c-2-10 6-24 18-26 11-2 22 6 22 16 0 8-6 10-18 10z" fill="#8d8a9c" stroke="#5f5c70" stroke-width="2.5"/><path d="M14 24c3-3 7-4 10-3" stroke="#b9b6c7" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>');
+    const sky = g.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, '#bfe8ff'); sky.addColorStop(1, '#fff3d6');
+    const PW = 132, PH = 110, PX = 36;
+    let y = 0, vy = 0, rocks = [], spawn = 900, score = 0, lives = 3, hurt = 0, played = 0, last = performance.now(), running = true, raf = 0, scroll = 0;
+    const jump = () => { if (!running) return; if (y >= -1) { vy = -0.95; snd.play('tap'); } };
+    cv.addEventListener('pointerdown', (e) => { e.preventDefault(); jump(); });
+    const onKey = (e) => { if (e.code === 'Space' || e.key === ' ' || e.key === 'ArrowUp') { e.preventDefault(); jump(); } };
+    window.addEventListener('keydown', onKey);
+    cv.style.touchAction = 'none';
+    function frame(now) {
+      if (!running) return;
+      if (now - last < 14) { raf = requestAnimationFrame(frame); return; }
+      const raw = Math.max(0, now - last), dt = Math.min(40, raw); last = now;
+      const el = (played += Math.min(250, raw));
+      const sp = 0.22 + el / 90000; // la velocidad sube de a poco
+      // física del salto
+      vy += 0.0032 * dt; y = Math.min(0, y + vy * dt); if (y === 0) vy = 0;
+      // piedras
+      spawn -= dt;
+      if (spawn <= 0) { rocks.push({ x: W + 20, w: 34 + Math.random() * 14, passed: false }); spawn = 750 + Math.random() * 900 - Math.min(400, el / 60); }
+      rocks.forEach((r) => { r.x -= sp * dt; });
+      rocks.forEach((r) => {
+        const hit = r.x < PX + PW * 0.72 && r.x + r.w > PX + PW * 0.3 && y > -30;
+        if (hit && !r.hit && hurt <= 0) { r.hit = true; lives--; hurt = 900; snd.play('bad'); showLv(lives); }
+        if (!r.passed && r.x + r.w < PX + PW * 0.3) { r.passed = true; if (!r.hit) { score++; showSc(score); snd.play('good'); } }
+      });
+      rocks = rocks.filter((r) => r.x > -60);
+      if (hurt > 0) hurt -= dt;
+      scroll = (scroll + sp * dt) % 40;
+      // dibujo
+      g.fillStyle = sky; g.fillRect(0, 0, W, H);
+      g.fillStyle = '#9fd67a'; g.fillRect(0, GY, W, H - GY);
+      g.fillStyle = '#7cbf5a'; for (let x = -scroll; x < W; x += 40) g.fillRect(x, GY + 8, 20, 4);
+      rocks.forEach((r) => { if (rockImg.complete) g.drawImage(rockImg, r.x, GY - r.w * 0.8 + 6, r.w, r.w * 0.83); });
+      if (!(hurt > 0 && Math.floor(hurt / 120) % 2)) { if (petImg.complete) g.drawImage(petImg, PX, GY - PH + 6 + y * 1, PW, PH); }
+      showTm(Math.max(0, Math.ceil((DUR - el) / 1000)));
+      if (el >= DUR || lives <= 0) { running = false; window.removeEventListener('keydown', onKey); finish(Math.min(score, MAX), MAX); return; }
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+    return { stop() { running = false; cancelAnimationFrame(raf); window.removeEventListener('keydown', onKey); } };
+  }
+
+  N.games = { catch: catchGame, guess: guessGame, memory: memoryGame, bubbles: bubblesGame, simon: simonGame, jump: jumpGame };
 })();

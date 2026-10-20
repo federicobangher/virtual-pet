@@ -1,95 +1,26 @@
-/* Animaciones de las mascotas (compartido por todos los modos) */
+/* Partes animables de las mascotas (compartido por todos los modos).
+   La animación la hace js/anim.js con un reloj propio a pocos cuadros por segundo: acá sólo se definen
+   los puntos de giro de cada parte. A propósito no hay animaciones CSS infinitas sobre la mascota,
+   porque obligan al navegador a redibujarla 60 o 120 veces por segundo y gastan batería. */
 svg.pet { overflow: visible; display: block; }
-svg.pet .bob { transform-origin: 100px 190px; animation: pet-breathe 2.6s ease-in-out infinite; }
-svg.pet.walking .bob { animation: pet-hop .42s ease-in-out infinite; }
-svg.pet.flying .bob { animation: pet-float 1.2s ease-in-out infinite; }
-svg.pet.mood-sleep .bob { animation: pet-breathe 3.8s ease-in-out infinite; }
-svg.pet.mood-dead .bob { animation: pet-float 3s ease-in-out infinite; }
+svg.pet .bob { transform-origin: 100px 190px; }
 svg.pet.mood-dead .flipper { filter: grayscale(.75) brightness(1.15); opacity: .85; }
-svg.pet.mood-happy .head { animation: pet-tilt 1.6s ease-in-out infinite; }
-svg.pet.mood-eat .head { animation: pet-nod .32s ease-in-out infinite; }
-
 svg.pet .foot { transform-box: view-box; }
-svg.pet.walking .foot-a { animation: pet-step .42s ease-in-out infinite; }
-svg.pet.walking .foot-b { animation: pet-step .42s ease-in-out infinite; animation-delay: -.21s; }
-
-svg.pet .wing { animation: pet-flap-slow 2.6s ease-in-out infinite; }
-svg.pet.walking .wing { animation: pet-flap-slow 1s ease-in-out infinite; }
-svg.pet.flying .wing { animation: pet-flap .28s ease-in-out infinite; }
-svg.pet.mood-sleep .wing, svg.pet.mood-dead .wing { animation: none; }
-svg.pet .tail { animation: pet-sway 2.2s ease-in-out infinite; }
-svg.pet.mood-sleep .tail { animation-duration: 4s; }
-
-svg.pet .eyes.blink { transform-box: fill-box; transform-origin: center; animation: pet-blink 4.2s infinite; }
-svg.pet .chomp .open { animation: pet-chomp-o .32s steps(1) infinite; }
-svg.pet .chomp .shut { animation: pet-chomp-s .32s steps(1) infinite; }
-svg.pet .peck { transform-box: fill-box; transform-origin: 20% 50%; animation: pet-peck .32s ease-in-out infinite; }
-svg.pet .tear { animation: pet-tear 2s ease-in infinite; }
-
-/* Las Z se ven siempre, aunque la animación esté apagada (Windows sin efectos de animación, celular con movimiento reducido) */
-svg.pet .zzz .z { animation: pet-z 2.4s ease-out infinite; opacity: .9; transform-box: fill-box; transform-origin: 50% 100%; }
-svg.pet .zzz .z2 { animation-delay: .8s; }
-svg.pet .zzz .z3 { animation-delay: 1.6s; }
-svg.pet .dizzy { animation: pet-spin 2.4s linear infinite; }
-svg.pet .halo { animation: pet-float 3s ease-in-out infinite; }
-svg.pet .twinkle { transform-box: fill-box; transform-origin: center; animation: pet-twinkle 1.8s ease-in-out infinite; }
-svg.pet .twinkle.t2 { animation-delay: .6s; }
-svg.pet .twinkle.t3 { animation-delay: 1.2s; }
-svg.pet.egg .wobble { animation: egg-wobble var(--wob, 2.4s) ease-in-out infinite; }
-
-@keyframes pet-breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.025, .972); } }
-@keyframes pet-hop { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-@keyframes pet-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
-@keyframes pet-tilt { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-5deg); } 70% { transform: rotate(4deg); } }
-@keyframes pet-nod { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(6deg) translateY(2px); } }
-@keyframes pet-step { 0%, 100% { transform: translate(-3px, 0); } 50% { transform: translate(3px, -5px); } }
-@keyframes pet-flap-slow { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-9deg); } }
-@keyframes pet-flap { 0%, 100% { transform: rotate(12deg); } 50% { transform: rotate(-32deg); } }
-@keyframes pet-sway { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-7deg); } }
-@keyframes pet-blink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
-@keyframes pet-chomp-o { 0% { opacity: 1; } 50% { opacity: 0; } }
-@keyframes pet-chomp-s { 0% { opacity: 0; } 50% { opacity: 1; } }
-@keyframes pet-peck { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(8deg); } }
-@keyframes pet-tear { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(14px); opacity: 0; } }
-@keyframes pet-z { 0% { opacity: 0; transform: translate(0, 4px) scale(.7); } 25% { opacity: 1; } 100% { opacity: 0; transform: translate(0, -14px) scale(1.1); } }
-@keyframes pet-spin { to { transform: rotate(360deg); } }
-@keyframes pet-twinkle { 0%, 100% { transform: scale(.4); opacity: .3; } 50% { transform: scale(1.1); opacity: 1; } }
-@keyframes egg-wobble { 0%, 70%, 100% { transform: rotate(0); } 76% { transform: rotate(-7deg); } 84% { transform: rotate(6deg); } 92% { transform: rotate(-3deg); } }
-
-@media (prefers-reduced-motion: reduce) {
-  svg.pet *, svg.pet .bob { animation-duration: 0s !important; animation-iteration-count: 1 !important; }
-}
+svg.pet .eyes.blink { transform-box: fill-box; transform-origin: center; }
+svg.pet .peck { transform-box: fill-box; transform-origin: 20% 50%; }
+svg.pet .zzz .z { opacity: .9; transform-box: fill-box; transform-origin: 50% 100%; }
+svg.pet .twinkle { transform-box: fill-box; transform-origin: center; }
 svg.pet.flying .shadow { opacity: 0; transition: opacity .3s; }
+/* las notas del pájaro y el fuego del dragón sólo aparecen durante el truco */
+svg.pet .notes .z { opacity: 0; }
+svg.pet .flame { opacity: 0; }
+svg.pet .ltongue { transform: scaleX(0); }
 
-/* ---------- gestos de reposo (como Neko) ---------- */
-svg.pet.act-stretch .bob { animation: pet-stretch 1.5s ease-in-out 1 !important; }
-svg.pet.act-hop .bob { animation: pet-jump .5s ease-out 2 !important; }
-svg.pet.act-scratch .foot-a { animation: pet-scratch .18s ease-in-out 8 !important; }
-svg.pet.act-scratch .head { animation: pet-head-side 1.5s ease-in-out 1 !important; }
-svg.pet.mood-yawn .head { animation: pet-yawn 1.6s ease-in-out 1 !important; }
-@keyframes pet-stretch { 0%, 100% { transform: scale(1, 1); } 35%, 65% { transform: scale(1.13, .88); } }
-@keyframes pet-jump { 0%, 100% { transform: translateY(0) scale(1, 1); } 15% { transform: translateY(0) scale(1.08, .92); } 45% { transform: translateY(-24px) scale(.95, 1.06); } }
-@keyframes pet-scratch { 0%, 100% { transform: translate(5px, -15px) rotate(-18deg); } 50% { transform: translate(7px, -19px) rotate(-26deg); } }
-@keyframes pet-head-side { 0%, 100% { transform: rotate(0); } 30%, 70% { transform: rotate(9deg); } }
-@keyframes pet-yawn { 0%, 100% { transform: rotate(0); } 30%, 70% { transform: rotate(-7deg) translateY(-2px); } }
-
+/* Mariposa: aparece unos segundos y se va */
 .butterfly { position: absolute; left: 0; top: 0; width: 34px; height: 28px; z-index: 7; pointer-events: none; }
 .butterfly svg { width: 100%; height: 100%; display: block; }
-.butterfly .bf-l { animation: bf-flap-l .22s ease-in-out infinite; }
-.butterfly .bf-r { animation: bf-flap-r .22s ease-in-out infinite; }
-@keyframes bf-flap-l { 50% { transform: scaleX(.35); } }
-@keyframes bf-flap-r { 50% { transform: scaleX(.35); } }
-
-/* ---------- trucos especiales ---------- */
-svg.pet.act-special .flame { animation: flame-grow 1.8s ease-out 1 both; }
-svg.pet.act-special .flame-in { animation: flame-flick .1s ease-in-out infinite alternate; }
-svg.pet.sp-bird.act-special .wing { animation: pet-flap .2s ease-in-out infinite !important; }
-svg.pet.sp-bird.act-special .bob { animation: bird-flutter 2s ease-in-out 1 !important; }
-svg.pet.sp-turtle.act-special .head { animation: turtle-hide 2.4s ease-in-out 1 !important; }
-svg.pet.act-special .ltongue { animation: tongue-flick .5s ease-in-out 3 both; }
-svg.pet .notes .z { animation-duration: 1.2s; }
-@keyframes flame-grow { 0% { transform: scale(0, .3); opacity: 1; } 15% { transform: scale(1, 1); } 80% { transform: scale(1, 1); opacity: 1; } 100% { transform: scale(.25, .4); opacity: 0; } }
-@keyframes flame-flick { 0% { transform: scale(.92, 1.1); } 100% { transform: scale(1.06, .9); } }
-@keyframes bird-flutter { 0%, 100% { transform: translateY(0); } 30%, 70% { transform: translateY(-18px); } 50% { transform: translateY(-22px); } }
-@keyframes turtle-hide { 0%, 100% { transform: translate(0, 0) scale(1); } 20%, 55% { transform: translate(-24px, 8px) scale(.55); } 70% { transform: translate(-8px, 2px) scale(.9); } 80% { transform: translate(2px, -2px) scale(1.03); } }
-@keyframes tongue-flick { 0%, 100% { transform: scaleX(0); } 35%, 65% { transform: scaleX(1); } }
+.butterfly .bf-l, .butterfly .bf-r { animation: bf-flap .24s steps(2, jump-none) 25; }
+@keyframes bf-flap { 50% { transform: scaleX(.35); } }
+@media (prefers-reduced-motion: reduce) {
+  .butterfly .bf-l, .butterfly .bf-r { animation: none; }
+}

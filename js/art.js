@@ -413,6 +413,30 @@
         return `<g><path d="M${f(nx - r * 0.75)} ${f(ny - r * 0.12)} Q${f(nx)} ${f(ny + r * 0.25)} ${f(nx + r * 0.8)} ${f(ny - r * 0.15)} L${f(nx + r * 0.8)} ${f(ny + r * 0.12)} Q${f(nx)} ${f(ny + r * 0.5)} ${f(nx - r * 0.75)} ${f(ny + r * 0.15)} Z" fill="#2ec4b6"/>` +
           `<path d="M${f(nx - r * 0.45)} ${f(ny + r * 0.2)} l${f(-r * 0.15)} ${f(r * 0.55)} l${f(r * 0.28)} ${f(r * 0.04)} l${f(r * 0.05)} ${f(-r * 0.5)} Z" fill="#26a69a"/></g>`;
       }
+      case 'flower': {
+        const cx = x - r * 0.38, cy = top + r * 0.14, pr = r * 0.13, d = r * 0.17;
+        const petals = [0, 72, 144, 216, 288].map((a) => `<circle cx="${f(cx + Math.cos((a - 90) * Math.PI / 180) * d)}" cy="${f(cy + Math.sin((a - 90) * Math.PI / 180) * d)}" r="${f(pr)}" fill="#fff" stroke="#e6d8f2" stroke-width="1.2"/>`).join('');
+        return `<g>${petals}<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r * 0.11)}" fill="#ffc93c" stroke="#d99a1a" stroke-width="1.2"/></g>`;
+      }
+      case 'cap': {
+        const by = top + r * 0.3, w = r * 0.66;
+        return `<g><path d="M${f(x - w)} ${f(by)} Q${f(x - w)} ${f(by - r * 0.62)} ${f(x)} ${f(by - r * 0.62)} Q${f(x + w)} ${f(by - r * 0.62)} ${f(x + w)} ${f(by)} Z" fill="#e63946" stroke="#9d1d2a" stroke-width="1.8" stroke-linejoin="round"/>` +
+          `<path d="M${f(x + w * 0.55)} ${f(by - r * 0.04)} Q${f(x + w * 1.25)} ${f(by - r * 0.12)} ${f(x + w * 1.55)} ${f(by + r * 0.08)} Q${f(x + w * 1.1)} ${f(by + r * 0.14)} ${f(x + w * 0.55)} ${f(by + r * 0.06)} Z" fill="#c1121f" stroke="#9d1d2a" stroke-width="1.6" stroke-linejoin="round"/>` +
+          `<path d="M${f(x - w * 0.15)} ${f(by - r * 0.6)} Q${f(x + w * 0.1)} ${f(by - r * 0.3)} ${f(x + w * 0.05)} ${f(by)}" stroke="#ff8fa0" stroke-width="1.5" fill="none"/><circle cx="${f(x)}" cy="${f(by - r * 0.63)}" r="${f(r * 0.07)}" fill="#9d1d2a"/></g>`;
+      }
+      case 'headphones': {
+        const hy = y - r * 0.05, w = r * 0.92;
+        return `<g><path d="M${f(x - w)} ${f(hy)} Q${f(x - w)} ${f(top - r * 0.22)} ${f(x)} ${f(top - r * 0.22)} Q${f(x + w)} ${f(top - r * 0.22)} ${f(x + w)} ${f(hy)}" stroke="#2b2d42" stroke-width="${f(r * 0.13)}" fill="none" stroke-linecap="round"/>` +
+          `<rect x="${f(x - w - r * 0.14)}" y="${f(hy - r * 0.2)}" width="${f(r * 0.28)}" height="${f(r * 0.42)}" rx="${f(r * 0.1)}" fill="#ff5d9e" stroke="#2b2d42" stroke-width="1.8"/>` +
+          `<rect x="${f(x + w - r * 0.14)}" y="${f(hy - r * 0.2)}" width="${f(r * 0.28)}" height="${f(r * 0.42)}" rx="${f(r * 0.1)}" fill="#ff5d9e" stroke="#2b2d42" stroke-width="1.8"/></g>`;
+      }
+      case 'wizard': {
+        const bx = x - r * 0.02, by = top + 7, w = r * 0.5, hh = r * 1.25;
+        const star = (sx, sy, k) => `<path d="M${f(sx)} ${f(sy - 5 * k)} L${f(sx + 1.5 * k)} ${f(sy - 1.5 * k)} L${f(sx + 5 * k)} ${f(sy)} L${f(sx + 1.5 * k)} ${f(sy + 1.5 * k)} L${f(sx)} ${f(sy + 5 * k)} L${f(sx - 1.5 * k)} ${f(sy + 1.5 * k)} L${f(sx - 5 * k)} ${f(sy)} L${f(sx - 1.5 * k)} ${f(sy - 1.5 * k)} Z" fill="#ffd23f"/>`;
+        return `<g transform="rotate(-8 ${f(bx)} ${f(by)})"><path d="M${f(bx - w)} ${f(by)} Q${f(bx - w * 0.2)} ${f(by - hh * 0.55)} ${f(bx + w * 0.25)} ${f(by - hh)} Q${f(bx + w * 0.35)} ${f(by - hh * 0.5)} ${f(bx + w)} ${f(by)} Z" fill="#4c3bbd" stroke="#2a1f6e" stroke-width="1.8" stroke-linejoin="round"/>` +
+          star(bx - w * 0.2, by - hh * 0.32, r * 0.05) + star(bx + w * 0.35, by - hh * 0.15, r * 0.035) + star(bx + w * 0.05, by - hh * 0.62, r * 0.03) +
+          `<ellipse cx="${f(bx)}" cy="${f(by)}" rx="${f(r * 0.78)}" ry="${f(r * 0.15)}" fill="#3a2c9a" stroke="#2a1f6e" stroke-width="1.8"/></g>`;
+      }
       default:
         return '';
     }
@@ -618,6 +642,9 @@
     power: '<path d="M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0"/>',
     reset: '<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/>',
     pin: '<path d="M12 21s-6-6-6-11a6 6 0 0 1 12 0c0 5-6 11-6 11z"/><circle cx="12" cy="10" r="2"/>',
+    music: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
+    jump: '<path d="M4 20h16M7 16c1-6 4-9 9-9M14 4l3 3-3 3"/>',
+    leaf: '<path d="M5 19c0-9 6-14 15-14 0 9-5 15-14 15zM5 19l8-8"/>',
   };
   function icon(name, cls) {
     return `<svg class="ic ${cls || ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[name] || ''}</svg>`;
@@ -641,6 +668,10 @@
       case 'glasses': return w('<path d="M18 22h12" stroke="#2b1d1f" stroke-width="3"/><rect x="5" y="16" width="14" height="12" rx="4" fill="#1d1d2b"/><rect x="29" y="16" width="14" height="12" rx="4" fill="#1d1d2b"/><path d="M8 20l3-2M32 20l3-2" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".7"/>');
       case 'crown': return w('<path d="M8 36V14l8 9 8-13 8 13 8-9v22z" fill="#ffc93c" stroke="#c98a12" stroke-width="2" stroke-linejoin="round"/><circle cx="24" cy="26" r="3" fill="#ff5d73"/><circle cx="14" cy="29" r="2" fill="#4fa8ff"/><circle cx="34" cy="29" r="2" fill="#4fa8ff"/>');
       case 'scarf': return w('<path d="M6 16q18 10 36 0v8q-18 10-36 0z" fill="#2ec4b6"/><path d="M14 24l-4 16h7l3-14z" fill="#26a69a"/><path d="M12 30h6M11 35h6" stroke="#bff3ec" stroke-width="1.5"/>');
+      case 'flower': return w('<g fill="#fff" stroke="#e6d8f2" stroke-width="1.5">' + [0, 72, 144, 216, 288].map((a) => `<circle cx="${(24 + Math.cos((a - 90) * Math.PI / 180) * 10).toFixed(1)}" cy="${(22 + Math.sin((a - 90) * Math.PI / 180) * 10).toFixed(1)}" r="7.5"/>`).join('') + '</g><circle cx="24" cy="22" r="6" fill="#ffc93c" stroke="#d99a1a" stroke-width="1.5"/><path d="M24 33v12" stroke="#4a9637" stroke-width="3" stroke-linecap="round"/>');
+      case 'cap': return w('<path d="M8 30Q8 10 24 10Q38 10 38 30Z" fill="#e63946" stroke="#9d1d2a" stroke-width="2"/><path d="M30 29Q40 26 46 33Q38 35 30 33Z" fill="#c1121f" stroke="#9d1d2a" stroke-width="2" stroke-linejoin="round"/><circle cx="23" cy="10" r="2.5" fill="#9d1d2a"/>');
+      case 'headphones': return w('<path d="M9 30V24a15 15 0 0 1 30 0v6" stroke="#2b2d42" stroke-width="4" fill="none" stroke-linecap="round"/><rect x="4" y="26" width="10" height="15" rx="4" fill="#ff5d9e" stroke="#2b2d42" stroke-width="2"/><rect x="34" y="26" width="10" height="15" rx="4" fill="#ff5d9e" stroke="#2b2d42" stroke-width="2"/>');
+      case 'wizard': return w('<path d="M10 38Q20 22 28 4Q30 22 38 38Z" fill="#4c3bbd" stroke="#2a1f6e" stroke-width="2" stroke-linejoin="round"/><ellipse cx="24" cy="38" rx="20" ry="5" fill="#3a2c9a" stroke="#2a1f6e" stroke-width="2"/><path d="M21 24l1.3 2.7 2.7 1.3-2.7 1.3-1.3 2.7-1.3-2.7-2.7-1.3 2.7-1.3z" fill="#ffd23f"/><circle cx="28" cy="16" r="1.5" fill="#ffd23f"/>');
       case 'coin': return w('<circle cx="24" cy="24" r="17" fill="#ffc93c" stroke="#d99a1a" stroke-width="3"/><circle cx="24" cy="24" r="11" fill="none" stroke="#ffe08a" stroke-width="2"/><path d="M24 16l2.4 5 5.4.6-4 3.7 1.1 5.3L24 28l-4.9 2.6 1.1-5.3-4-3.7 5.4-.6z" fill="#fff3c4"/>');
       default: return w('');
     }

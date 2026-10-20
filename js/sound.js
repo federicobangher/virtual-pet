@@ -65,6 +65,7 @@
     death: () => seq([392, 370, 349, 330, 0, 262], 'sine', 0.32, 0.5),
     bad: () => tone(160, 0.22, { type: 'sawtooth', vol: 0.3, to: 90 }),
     good: () => tone(880, 0.09, { type: 'triangle', vol: 0.5, to: 1320 }),
+    note: (i) => tone([392, 494, 587, 698][i] || 440, 0.28, { type: 'triangle', vol: 0.55 }),
     // trucos especiales
     fire: () => {
       tone(200, 0.6, { type: 'sawtooth', to: 70, vol: 0.35 });
@@ -83,6 +84,7 @@
 
   N.sound = {
     play(name, arg) { if (!enabled()) return; try { FX[name] && FX[name](arg); } catch (e) { /* sin audio */ } },
-    unlock() { unlocked = true; try { ac(); } catch (e) {} },
+    // (con el sonido apagado no se crea el audio: en Windows eso levanta un proceso más de Chromium)
+    unlock() { unlocked = true; if (!enabled()) return; try { ac(); } catch (e) {} },
   };
 })();

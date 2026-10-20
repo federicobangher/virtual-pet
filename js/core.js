@@ -3,7 +3,7 @@
   'use strict';
   const N = (window.N = window.N || {});
   const MIN = 60e3, HOUR = 3600e3, DAY = 24 * HOUR;
-  N.APP = { name: 'Virtual Pet', version: '1.7.4', author: 'Facundo Bangher' };
+  N.APP = { name: 'Virtual Pet', version: '1.8.0', author: 'Facundo Bangher' };
 
   const SPECIES = {
     dragon: { name: 'Dragón', fav: 'Carne asada', egg: 'Huevo escamado', hint: 'Comilón: le da hambre seguido' },
@@ -40,6 +40,7 @@
     { id: 'gamer', name: 'Jugador', desc: 'Jugá 25 partidas', coins: 30, test: (s) => s.stats.games >= 25 },
     { id: 'style', name: 'Con estilo', desc: 'Comprá un accesorio', coins: 10, test: (s) => Object.keys(s.owned).length >= 1 },
     { id: 'collector', name: 'Coleccionista', desc: 'Comprá todos los accesorios', coins: 100, test: (s) => Object.keys(ITEMS).filter((k) => ITEMS[k].kind === 'wear').every((k) => s.owned[k]) },
+    { id: 'arcade', name: 'Fichines', desc: 'Desbloqueá todos los minijuegos', coins: 60, test: (s) => Object.keys(GAMES).every((k) => !GAMES[k].price || (s.gamesOwned && s.gamesOwned[k])) },
     { id: 'decor', name: 'Decorador', desc: 'Desbloqueá todos los fondos del cuarto', coins: 100, roomOnly: true, test: (s) => Object.keys(BACKGROUNDS).every((k) => s.bgOwned && s.bgOwned[k]) },
     { id: 'zoo', name: 'Zoológico', desc: 'Criá las 4 especies', coins: 100, test: (s) => Object.keys(s.stats.species).length >= 4 },
   ];
@@ -66,7 +67,31 @@
     scarf: { name: 'Bufanda', price: 35, kind: 'wear', desc: 'Para el invierno.' },
     glasses: { name: 'Anteojos de sol', price: 50, kind: 'wear', desc: 'Muy canchero.' },
     crown: { name: 'Corona', price: 120, kind: 'wear', desc: 'Para la realeza.' },
+    flower: { name: 'Flor', price: 45, kind: 'wear', desc: 'Una margarita en la cabeza.' },
+    cap: { name: 'Gorra', price: 60, kind: 'wear', desc: 'Con visera, para el sol.' },
+    headphones: { name: 'Auriculares', price: 90, kind: 'wear', desc: 'Para escuchar música.' },
+    wizard: { name: 'Gorro de mago', price: 160, kind: 'wear', desc: 'Con estrellas mágicas.' },
   };
+  // Orden en que se muestran los accesorios en la tienda
+  const WEAR = ['bow', 'scarf', 'hat', 'flower', 'glasses', 'cap', 'headphones', 'crown', 'wizard'];
+
+  /* Minijuegos: los primeros son gratis; los demás se desbloquean con monedas. */
+  const GAMES = {
+    catch: { name: 'Atrapá la comida', price: 0 },
+    guess: { name: '¿Para dónde mira?', price: 0 },
+    memory: { name: 'Memoria', price: 0 },
+    bubbles: { name: 'Burbujas', price: 0 },
+    simon: { name: 'Simón dice', price: 80 },
+    jump: { name: 'Salto', price: 120 },
+  };
+
+  /* Paquetes de monedas que se compran con dinero real (sólo en la app de Android, con Google Play).
+     "sku" es el ID del producto en Play Console: tiene que ser exactamente igual allá. */
+  const PACKS = [
+    { sku: 'monedas_chico', name: 'Bolsita de monedas', coins: 300 },
+    { sku: 'monedas_mediano', name: 'Cofre de monedas', coins: 800, tag: '+15 % de regalo' },
+    { sku: 'monedas_grande', name: 'Tesoro de monedas', coins: 2000, tag: '+40 % de regalo' },
+  ];
 
   // Reglas (por hora de juego). Ajustables en un solo lugar.
   const R = {
@@ -102,9 +127,9 @@
   /* --------- estado --------- */
   function freshState() {
     return {
-      v: 1, coins: R.startCoins, inv: Object.assign({}, R.startInv), owned: {}, wearing: null, bgOwned: { cuarto: true }, bg: 'cuarto',
+      v: 1, coins: R.startCoins, inv: Object.assign({}, R.startInv), owned: {}, wearing: null, bgOwned: { cuarto: true }, bg: 'cuarto', gamesOwned: {}, purchases: {},
       daily: { last: null, streak: 0 }, pet: null, lockUntil: 0, memorial: [],
-      settings: { sound: true, follow: false, notify: true, wander: true, onTop: true },
+      settings: { sound: true, follow: false, notify: true, wander: true, onTop: true, saver: false },
       lastSeen: now(), totalGames: 0,
       stats: freshStats(), achievements: {}, album: [],
     };
@@ -152,6 +177,9 @@
     st.stats.species = obj(st.stats.species);
     st.album = Array.isArray(st.album) ? st.album : [];
     st.inv = obj(st.inv); st.owned = obj(st.owned); st.achievements = obj(st.achievements);
+    st.gamesOwned = obj(st.gamesOwned); st.purchases = obj(st.purchases);
+    Object.keys(st.owned).forEach((k) => { if (!ITEMS[k] || ITEMS[k].kind !== 'wear') delete st.owned[k]; });
+    Object.keys(st.gamesOwned).forEach((k) => { if (!GAMES[k]) delete st.gamesOwned[k]; });
     st.memorial = (Array.isArray(st.memorial) ? st.memorial : []).filter((m) => m && SPECIES[m.species]);
     st.album = st.album.filter((ph) => ph && SPECIES[ph.species]);
     st.daily = Object.assign({ last: null, streak: 0 }, obj(st.daily));
@@ -480,6 +508,31 @@
     return { gap, events: ev };
   }
 
+  /* --------- predicción (para programar avisos con la app cerrada) --------- */
+  // Simula una copia de la mascota hacia adelante, sin azar, y devuelve cuándo va a empezar a pedir cada cosa.
+  // [{ id: 'food', level: 1|2, at: ms }] ordenado por hora. No toca la partida.
+  function predict(horizonMs, stepMs) {
+    const out = [];
+    if (!S || !S.pet || S.pet.dead || S.pet.stage === 'egg') return out;
+    const p = JSON.parse(JSON.stringify(S.pet));
+    const st = stepMs || 5 * MIN, end = Math.min(horizonMs || DAY, 2 * DAY);
+    const seen = {};
+    let t = now();
+    const lowRand = () => 1; // sin cacas ni enfermedades sorpresa: avisa lo que seguro va a pasar
+    for (let el = 0; el < end && !p.dead; el += st) {
+      t += st;
+      step(p, st, [], lowRand, t);
+      if (p.sleeping) continue;
+      const lv = (id, v) => { const a = ASKS[id]; return v < a.urgentAt ? 2 : v < a.ask ? 1 : 0; };
+      [['food', p.food], ['energy', p.energy], ['fun', p.fun], ['hygiene', p.hygiene], ['health', p.health]].forEach(([id, v]) => {
+        const l = lv(id, v);
+        if (l && (seen[id] || 0) < l) { seen[id] = l; out.push({ id, level: l, at: t }); }
+      });
+    }
+    if (p.dead) out.push({ id: 'death', level: 3, at: t });
+    return out.sort((a, b) => a.at - b.at);
+  }
+
   /* --------- premio diario --------- */
   // (si el reloj se atrasó y "hoy" quedó antes del último cobro, no se vuelve a cobrar)
   function dailyPending() { const d = dayKey(now()); return d !== S.daily.last && !(S.daily.last && d < S.daily.last); }
@@ -643,8 +696,8 @@
     },
     buy(itemId, qty) {
       const it = ITEMS[itemId];
-      qty = qty || 1;
-      if (!it) return no('');
+      qty = Math.floor(Number(qty) || 1);
+      if (!it || qty < 1 || qty > 99 || (it.kind === 'wear' && qty !== 1)) return no('');
       if (it.kind === 'wear' && S.owned[itemId]) return no('Ya lo tenés.');
       const cost = it.price * qty;
       if (S.coins < cost) return no('No te alcanzan las monedas.');
@@ -673,6 +726,32 @@
       S.bg = id;
       return done(ok(''));
     },
+    // Minijuegos que se desbloquean con monedas
+    buyGame(id) {
+      const g = GAMES[id];
+      if (!g) return no('');
+      if (!g.price || S.gamesOwned[id]) return no('Ya lo tenés.');
+      if (S.coins < g.price) return no('No te alcanzan las monedas.');
+      S.coins -= g.price;
+      S.gamesOwned[id] = true;
+      return done(ok('¡Juego nuevo!'));
+    },
+    // Acredita una compra con dinero real (paquete de monedas). Cada compra tiene un ID único (el de Google Play):
+    // si llega dos veces (por ejemplo, al reabrir la app antes de que Google la confirme), se acredita una sola vez.
+    grantPurchase(txId, sku, qty) {
+      const pack = PACKS.find((x) => x.sku === sku);
+      txId = String(txId || '');
+      if (!pack || !txId) return no('Compra desconocida.');
+      if (S.purchases[txId]) return ok('', { dup: true, coins: 0 });
+      qty = Math.max(1, Math.min(20, Math.floor(Number(qty) || 1)));
+      const coins = pack.coins * qty;
+      S.purchases[txId] = { sku, qty, coins, t: now() };
+      // se guardan sólo las últimas 300 compras (alcanza de sobra para reconocer repetidas)
+      const ids = Object.keys(S.purchases);
+      if (ids.length > 300) ids.sort((a, b) => (S.purchases[a].t || 0) - (S.purchases[b].t || 0)).slice(0, ids.length - 300).forEach((k) => delete S.purchases[k]);
+      S.coins += coins;
+      return done(ok('¡Gracias por tu compra!', { coins }));
+    },
     rename(name) {
       if (!S.pet) return no('');
       const n = (name || '').trim().slice(0, 16);
@@ -692,7 +771,7 @@
     },
     // Borra todo y vuelve a elegir mascota (conserva sólo los ajustes y el día del premio diario)
     resetAll() {
-      const keep = { settings: S.settings, daily: S.daily };
+      const keep = { settings: S.settings, daily: S.daily, purchases: S.purchases };
       S = Object.assign(freshState(), keep);
       save();
       N.emit('reset');
@@ -733,7 +812,7 @@
   }
 
   N.core = {
-    SPECIES, ITEMS, BACKGROUNDS, R, HOUR, MIN, DAY,
+    SPECIES, ITEMS, BACKGROUNDS, GAMES, PACKS, WEAR, R, HOUR, MIN, DAY, predict, ASKS,
     load, save, resume, tick, advance, step, claimDaily, dailyPending,
     mood, needs, ageText, xpNeed, addXP, isNight, exportState, importState, ACHIEVEMENTS, TRAITS, checkAchievements, stageName, careAvg, isLocked, dayKey, newPet, freshState,
     get state() { return S; },

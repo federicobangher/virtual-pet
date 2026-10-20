@@ -4,14 +4,22 @@
   'use strict';
   const N = window.N;
   const C = N.core, art = N.art, snd = N.sound;
+  const plat = N.platform || { kind: 'web', onBack() {}, layerChanged() {}, setLayersQuery() {}, onLifecycle() {}, canSchedule: false };
 
   const h = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const ic = (n, cls) => art.icon(n, cls);
   // Escriben en la página sólo si el valor cambió (así el navegador no recalcula nada de más cada segundo)
   const setText = (el, v) => { v = String(v); if (el.textContent !== v) el.textContent = v; };
-  const setW = (el, pct) => { const v = pct + '%'; if (el.style.width !== v) el.style.width = v; };
+  // Las barras se llenan con transform (lo mueve la placa de video) en vez de cambiar el ancho, que obliga
+  // a recalcular el diseño de la página en cada cuadro de la transición.
+  const setW = (el, pct) => { const v = `translateX(${(+pct - 100).toFixed(1)}%)`; if (el.style.transform !== v) el.style.transform = v; };
   const setHTML = (el, html) => { if (el._html !== html) { el._html = html; el.innerHTML = html; } };
+  // Cambiar una clase o "hidden" al mismo valor igual cuenta como cambio para el navegador: sólo si cambia.
+  const setCls = (el, c, on) => { on = !!on; if (el.classList.contains(c) !== on) el.classList.toggle(c, on); };
+  const setHidden = (el, v) => { v = !!v; if (el.hidden !== v) el.hidden = v; };
+  // Repite una animación corta (el ícono que pide algo, una barra baja) en vez de dejarla girando para siempre
+  const ping = (el, ms) => { if (!el) return; el.classList.remove('ping'); void el.offsetWidth; el.classList.add('ping'); clearTimeout(el._pingT); el._pingT = setTimeout(() => el.classList.remove('ping'), ms || 4500); };
   const coinIc = () => `<span class="coin-ic">${art.itemSVG('coin')}</span>`;
 
   const METERS = [
@@ -46,6 +54,19 @@
       }
       if (svg) { this.el.innerHTML = svg; this.key = key; if (this.onSvg) this.onSvg(); }
     }
+  }
+
+  // Mascota animada dentro de una ventana o un juego: se anima con el mismo reloj de pocos cuadros
+  // y se apaga sola cuando la ventana se cierra.
+  function liveView(box, mood) {
+    const v = new PetView(box);
+    if (mood) v.setTemp(mood, 9e9);
+    v.render(true);
+    if (N.petAnim) {
+      const a = N.petAnim({ svg: () => (box.isConnected ? box.firstElementChild : null), view: () => v, ms: { active: 83, idle: 140, sleep: 400, egg: 100 }, autoStop: true, saver: saverOn });
+      v.onSvg = () => a.kick();
+    }
+    return v;
   }
 
   /* ============ efectos ============ */
@@ -125,24 +146,25 @@
     setText(P.hud.querySelector('.pname'), p ? p.name : 'Virtual Pet');
     const chip = P.hud.querySelector('.pstage');
     setText(chip, p ? (p.dead ? 'En el cielo' : p.stage === 'egg' ? 'Huevo' : C.stageName(p.stage) + ' · ' + C.ageText(p)) : '');
-    chip.hidden = !p;
+    setHidden(chip, !p);
     const egg = p && p.stage === 'egg';
-    P.meters.hidden = !p || egg || p.dead;
-    P.level.hidden = !p || egg || p.dead;
+    setHidden(P.meters, !p || egg || p.dead);
+    setHidden(P.level, !p || egg || p.dead);
     if (p && !egg && !p.dead) {
       const max = p.level >= C.R.maxLevel;
       setText(P.level.querySelector('.lvnum'), 'Nivel ' + p.level);
       setW(P.level.querySelector('.xp i'), max ? 100 : Math.min(100, Math.round((p.xp / C.xpNeed(p.level)) * 1000) / 10));
       setText(P.level.querySelector('.lvnext'), max ? '¡Máximo!' : Math.floor(p.xp) + ' / ' + C.xpNeed(p.level));
-      P.level.classList.toggle('max', max);
+      setCls(P.level, 'max', max);
     }
-    P.eggbar.hidden = !egg;
+    setHidden(P.eggbar, !egg);
     if (p && !egg) {
       METERS.forEach((m) => {
         const v = Math.round(p[m.k]);
         const el = P.meters.querySelector('.m-' + m.k);
         setW(el.querySelector('i'), v);
-        el.classList.toggle('low', v < 25);
+        if (v < 25 && !el.classList.contains('low')) { el.classList.add('low'); ping(el, 3200); }
+        else if (v >= 25) setCls(el, 'low', false);
         const ti = `${m.label}: ${v}%`;
         if (el.title !== ti) el.title = ti;
       });
@@ -162,21 +184,21 @@
         P.actions.appendChild(b);
       });
       P.lastActKey = key;
-      P.actions.classList.toggle('egg-actions', egg);
+      setCls(P.actions, 'egg-actions', egg);
     }
     if (p && !egg && !p.dead) {
       const sl = P.actions.querySelector('.act-sleep');
       setText(sl.querySelector('.al'), p.sleeping ? 'Despertar' : 'Dormir');
       setHTML(sl.querySelector('.ai'), ic(p.sleeping ? 'wake' : 'sleep'));
       const cb = P.actions.querySelector('.act-clean .badge');
-      cb.hidden = !p.poops.length; setText(cb, p.poops.length);
+      setHidden(cb, !p.poops.length); setText(cb, p.poops.length);
       const mb = P.actions.querySelector('.act-med .badge');
-      mb.hidden = !p.sick; setText(mb, '!');
+      setHidden(mb, !p.sick); setText(mb, '!');
       const fb = P.actions.querySelector('.act-food .badge');
-      fb.hidden = !(p.food < 25); setText(fb, '!');
+      setHidden(fb, !(p.food < 25)); setText(fb, '!');
       P.actions.querySelectorAll('.act').forEach((b) => {
         const id = b.className.match(/act-(\w+)/)[1];
-        b.classList.toggle('dim', p.sleeping && ['food', 'play', 'bath'].includes(id));
+        setCls(b, 'dim', p.sleeping && ['food', 'play', 'bath'].includes(id));
       });
     }
   }
@@ -207,6 +229,8 @@
     const action = a ? { label: a.label, run: () => { snd.unlock(); snd.play('tap'); a.run(); } } : null;
     say(need.text, need.level === 2, 7000, action);
     snd.play(need.level === 2 ? 'alert' : 'voice', p.species);
+    if (needEl && !needEl.hidden) ping(needEl, need.level === 2 ? 4000 : 4500);
+    if (P.meters) P.meters.querySelectorAll('.meter.low').forEach((m) => ping(m, 3200));
     host().onAsk && host().onAsk(need, action);
     if (need.level === 2) notify(need);
   }
@@ -225,11 +249,12 @@
     const key = top ? top.id + top.level : '';
     if (key === needShown) return;
     needShown = key;
-    needEl.hidden = !top;
+    setHidden(needEl, !top);
     if (!top) return;
     const a = NEED_ACTIONS[top.id];
     needEl.dataset.need = top.id;
-    needEl.classList.toggle('urgent', top.level === 2);
+    setCls(needEl, 'urgent', top.level === 2);
+    ping(needEl);
     needEl.title = a ? a.label : '';
     needEl.innerHTML = ic(a ? a.icon : 'help');
   }
@@ -242,8 +267,9 @@
     // el globito de diálogo sale justo arriba de la cabeza (sirve para cualquier especie y etapa)
     const bub = Math.round(Math.min(92, Math.max(30, (1 - ht / 200) * 100 + 3)));
     if (box._bub == null || Math.abs(box._bub - bub) > 3) { box._bub = bub; box.style.setProperty('--bub', bub + '%'); }
-    needEl.style.left = ((x + 20) / 240 * 100).toFixed(1) + '%';
-    needEl.style.top = (y / 200 * 100).toFixed(1) + '%';
+    const l = ((x + 20) / 240 * 100).toFixed(1) + '%', tp = (y / 200 * 100).toFixed(1) + '%';
+    if (needEl.style.left !== l) needEl.style.left = l;
+    if (needEl.style.top !== tp) needEl.style.top = tp;
   }
   /* ============ gestos de reposo (como Neko) ============ */
   let nextIdle = Date.now() + 8000;
@@ -330,17 +356,30 @@
   }
 
   /* ============ hojas ============ */
-  let sheetName = null;
+  // Antes, al pasar de una hoja a otra (Más → Logros, "Jugar otra vez") la hoja vieja, al cerrarse, borraba
+  // el nombre de la nueva: el juego creía que no había nada abierto y la mascota hablaba encima del juego.
+  // Ahora cada hoja tiene su "ficha" y sólo limpia el estado si sigue siendo la que está abierta.
+  let sheetName = null, sheetTok = null;
+  function showSheet(name, title, node, r, wide) {
+    const tok = {};
+    host().sheet(title, node, {
+      onClose: () => {
+        if (r && r.onClose) r.onClose();
+        if (sheetTok === tok) { sheetTok = null; sheetName = null; currentSheet = null; plat.layerChanged(); }
+      },
+      wide,
+    });
+    sheetTok = tok; sheetName = name; currentSheet = r;
+    plat.layerChanged();
+  }
   function openSheet(name, arg) {
-    sheetName = name;
     const b = SHEETS[name];
     if (!b) return;
     const r = b(arg);
-    host().sheet(r.title, r.node, { onClose: () => { sheetName = null; if (currentSheet === r) currentSheet = null; if (r.onClose) r.onClose(); }, wide: r.wide });
-    currentSheet = r;
+    showSheet(name, r.title, r.node, r, r.wide);
   }
   let currentSheet = null;
-  function closeSheet() { sheetName = null; host().sheetClose(); }
+  function closeSheet() { host().sheetClose(); sheetName = null; sheetTok = null; currentSheet = null; plat.layerChanged(); }
   function refreshSheet() {
     if (!sheetName || !currentSheet || currentSheet.live === false) return;
     if (currentSheet.refresh) currentSheet.refresh();
@@ -392,6 +431,79 @@
     });
   }
 
+  /* ============ minijuegos: catálogo ============ */
+  const GAME_INFO = {
+    catch: { art: () => art.itemSVG('fruit'), desc: 'Mové la canasta y atrapá todo lo rico. ¡Cuidado con las piedras!' },
+    guess: { art: () => ic('back') + ic('back', 'flipx'), desc: 'Adiviná hacia qué lado va a mirar. 5 rondas.' },
+    memory: { art: () => art.itemSVG('cake'), desc: 'Dá vuelta las cartas y encontrá los pares de comida.' },
+    bubbles: { art: () => ic('bath'), desc: 'Reventá todas las burbujas que puedas. Las doradas valen más.' },
+    simon: { art: () => ic('music'), desc: 'Mirá el orden en que se prenden los colores y repetilo. ¡Cada vez es más largo!' },
+    jump: { art: () => ic('jump'), desc: 'Tu mascota corre: tocá la pantalla para saltar las piedras.' },
+  };
+  const gameLocked = (id) => !!(C.GAMES[id] && C.GAMES[id].price && !C.state.gamesOwned[id]);
+  function gameCard(id, inShop) {
+    const g = C.GAMES[id], info = GAME_INFO[id] || { art: () => '', desc: '' }, locked = gameLocked(id);
+    const lock = locked ? `<span class="gc-lock">${ic('lock')} ${g.price}${coinIc()}</span>` : '';
+    const tag = inShop && !locked && g.price ? '<span class="gc-lock">Es tuyo</span>' : '';
+    return `<button type="button" class="game-card${locked ? ' locked' : ''}" data-g="${id}">${g.price && locked ? '<span class="gc-new">Nuevo</span>' : ''}<span class="gc-art">${info.art()}</span><b>${esc(g.name)}</b><small>${esc(info.desc)}</small>${lock || tag}</button>`;
+  }
+  function gamesShopHTML() {
+    const ids = Object.keys(C.GAMES).filter((id) => C.GAMES[id].price);
+    return '<div class="games">' + ids.map((id) => gameCard(id, true)).join('') + '</div>';
+  }
+  function unlockGame(id, after) {
+    const g = C.GAMES[id];
+    if (C.state.coins < g.price) { snd.play('bad'); say(`Te faltan ${g.price - C.state.coins} monedas para ${g.name}`, true, 3000); return; }
+    const r = C.act.buyGame(id);
+    if (r.ok) { snd.play('coin'); say('¡' + g.name + ' desbloqueado!', false, 2500); } else { snd.play('bad'); say(r.msg, true); }
+    after && after();
+  }
+  function bindGameBuy(node, after) {
+    node.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-g]'); if (!b) return;
+      snd.unlock();
+      const id = b.dataset.g;
+      if (gameLocked(id)) unlockGame(id, after);
+      else { const r = C.act.canPlay(); if (!r.ok) return say(r.msg, true); startGame(id); }
+    });
+  }
+
+  /* ============ paquetes de monedas (Google Play) ============ */
+  const BL = () => N.billing || { enabled: false };
+  let packBusy = '';
+  function onBilling(fn) {
+    const b = BL();
+    if (!b.onChange) return null;
+    let alive = true;
+    b.onChange(() => { if (alive) fn(); });
+    return () => { alive = false; };
+  }
+  function packsHTML() {
+    const b = BL();
+    if (!b.enabled) return '';
+    const rows = C.PACKS.map((pk) => {
+      const price = b.price(pk.sku);
+      const label = packBusy === pk.sku ? 'Abriendo…' : price ? esc(price) : '…';
+      return `<div class="pack"><span class="item-art">${art.itemSVG('coin')}</span><span class="item-txt"><b>${esc(pk.name)}</b><span class="pk-coins">+${pk.coins}${coinIc()}${pk.tag ? `<span class="pk-tag">${esc(pk.tag)}</span>` : ''}</span></span><button type="button" class="btn primary" data-pack="${pk.sku}" ${!price || packBusy ? 'disabled' : ''}>${label}</button></div>`;
+    }).join('');
+    const note = b.mode === 'demo' ? 'Modo de prueba: no se cobra nada.' : 'El pago lo hace Google Play con la cuenta del celular. Las monedas se pueden ganar gratis jugando todos los días.';
+    return `<h4>${ic('gift')} Más monedas</h4><div class="packs">${rows}</div><p class="note pack-note">${note}</p>` +
+      (b.pending ? '<p class="note warn">Tenés una compra esperando el pago. Las monedas llegan solas cuando se confirme.</p>' : '') +
+      (b.error && b.mode === 'play' ? `<p class="pack-err">${esc(b.error)}</p>` : '');
+  }
+  function bindPacks(node, after) {
+    node.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-pack]'); if (!btn || packBusy) return;
+      snd.unlock(); snd.play('tap');
+      packBusy = btn.dataset.pack; after && after();
+      BL().buy(packBusy).then((r) => {
+        packBusy = '';
+        if (!r.ok && !r.cancelled && r.msg) { snd.play('bad'); say(r.msg, true, 3500); }
+        after && after();
+      }).catch(() => { packBusy = ''; after && after(); });
+    });
+  }
+
   function bindItems(node, after) {
     node.addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b) return;
@@ -433,25 +545,27 @@
         setHTML(node, `<p class="note">Tenés <b>${C.state.coins}</b>${coinIc()} — ganás más jugando y entrando todos los días.</p>` +
           '<h4>Comida</h4>' + ['fruit', 'fav', 'cake'].map((id) => itemRow(id, 'shop')).join('') +
           '<h4>Salud</h4>' + ['medicine', 'vitamins'].map((id) => itemRow(id, 'shop')).join('') +
-          '<h4>Accesorios</h4>' + ['bow', 'scarf', 'hat', 'glasses', 'crown'].map((id) => itemRow(id, 'shop')).join('') +
-          (host().kind === 'room' ? `<h4>${ic('image')} Fondos</h4>` + bgGrid() : ''));
+          packsHTML() +
+          '<h4>Accesorios</h4>' + C.WEAR.map((id) => itemRow(id, 'shop')).join('') +
+          (host().kind === 'room' ? `<h4>${ic('image')} Fondos</h4>` + bgGrid() : '') +
+          `<h4>${ic('play')} Minijuegos</h4>` + gamesShopHTML());
       };
-      render(); bindItems(node, render); bindBg(node, render);
-      return { title: 'Tienda', node, refresh: render };
+      render(); bindItems(node, render); bindBg(node, render); bindPacks(node, render); bindGameBuy(node, render);
+      const off = onBilling(render);
+      return { title: 'Tienda', node, refresh: render, onClose: off };
     },
     games() {
-      const node = h(`<div class="games">
-        <button type="button" class="game-card" data-g="catch"><span class="gc-art">${art.itemSVG('fruit')}</span><b>Atrapá la comida</b><small>Mové la canasta y atrapá todo lo rico. ¡Cuidado con las piedras!</small></button>
-        <button type="button" class="game-card" data-g="guess"><span class="gc-art">${ic('back')}${ic('back', 'flipx')}</span><b>¿Para dónde mira?</b><small>Adiviná hacia qué lado va a mirar. 5 rondas.</small></button>
-        <button type="button" class="game-card" data-g="memory"><span class="gc-art">${art.itemSVG('cake')}</span><b>Memoria</b><small>Dá vuelta las cartas y encontrá los pares de comida.</small></button>
-        <button type="button" class="game-card" data-g="bubbles"><span class="gc-art">${ic('bath')}</span><b>Burbujas</b><small>Reventá todas las burbujas que puedas. Las doradas valen más.</small></button>
-      </div>`);
+      const node = h('<div class="games"></div>');
+      const render = () => setHTML(node, Object.keys(C.GAMES).map((id) => gameCard(id)).join(''));
+      render();
       node.addEventListener('click', (e) => {
         const b = e.target.closest('[data-g]'); if (!b) return;
-        snd.play('tap');
-        startGame(b.dataset.g);
+        snd.unlock(); snd.play('tap');
+        const id = b.dataset.g;
+        if (gameLocked(id)) { unlockGame(id, render); return; }
+        startGame(id);
       });
-      return { title: 'Jugar', node, live: false };
+      return { title: 'Jugar', node, refresh: render };
     },
     more() {
       const node = h('<div class="more"></div>');
@@ -468,7 +582,8 @@
           <section><h4>${ic('shirt')} Accesorios</h4>${owned.length ? '<div class="list">' + owned.map((id) => itemRow(id, 'shop')).join('') + '</div>' : '<p class="note">Todavía no compraste accesorios. Están en la tienda.</p>'}</section>
           <section><h4>${ic('gear')} Ajustes</h4>
             ${toggle('sound', 'Sonido', st.sound)}
-            ${toggle('notify', desk ? 'Avisos de Windows cuando necesita algo' : 'Avisos cuando necesita algo', st.notify)}
+            ${toggle('notify', desk ? 'Avisos de Windows cuando necesita algo' : plat.canSchedule ? 'Avisos cuando necesita algo (aunque la app esté cerrada)' : 'Avisos cuando necesita algo', st.notify)}
+            ${desk ? toggle('saver', 'Ahorro de energía', st.saver, 'La mascota se anima más despacio y la compu trabaja menos.') : toggle('saver', 'Ahorro de batería', st.saver, 'La mascota se mueve un poco menos. Se prende solo con poca batería.')}
             ${desk ? toggle('follow', 'Que me siga el puntero del mouse', st.follow) : ''}
             ${desk ? toggle('onTop', 'Siempre visible (arriba de las ventanas)', st.onTop !== false) : ''}
             ${desk ? toggle('wander', 'Que pasee sola por todo el escritorio', st.wander) : ''}
@@ -507,6 +622,7 @@
         const k = t.dataset.set;
         C.act.setting(k, t.checked);
         if (k === 'notify' && t.checked) askNotify();
+        if (k === 'saver') H.onSaver && H.onSaver(t.checked);
         host().onSetting && host().onSetting(k, t.checked);
       });
       node.addEventListener('click', (e) => {
@@ -572,9 +688,11 @@
     node.addEventListener('click', (e) => { if (e.target.closest('[data-photo]')) { const r = C.act.photo(); if (r.ok) { snd.play('coin'); render(); } } });
     return { title: 'Álbum', node, refresh: render };
   };
-  function toggle(k, label, on) {
-    return `<label class="toggle"><span>${label}</span><input type="checkbox" data-set="${k}" id="set-${k}" ${on ? 'checked' : ''}><i></i></label>`;
+  function toggle(k, label, on, hint) {
+    return `<label class="toggle"><span>${label}${hint ? `<small>${hint}</small>` : ''}</span><input type="checkbox" data-set="${k}" id="set-${k}" ${on ? 'checked' : ''}><i></i></label>`;
   }
+  // Ahorro de batería: a mano, o solo cuando el celular tiene poca batería
+  function saverOn() { const S = C.state; return !!(S && (S.settings.saver || (N.platform && N.platform.lowBattery))); }
   function ageOf(ms) { return C.ageText({ age: ms || 0 }); }
   const HELP = `<p>Tu mascota tiene cinco necesidades que bajan con el tiempo, aunque cierres el juego: <b>comida, energía, diversión, higiene y salud</b>.</p>
     <p>Si la descuidás se enferma. Si se enferma y no le das el remedio, o pasa mucho tiempo sin comer, la salud baja. <b>Si la salud llega a cero, se muere</b> y tenés que esperar <b>24 horas</b> para empezar con un huevo nuevo.</p>
@@ -600,13 +718,12 @@
       snd.play(ok ? 'happy' : 'sad');
       node.innerHTML = `<div class="game-over"><div class="go-pet"></div><h3>${ok ? '¡Muy bien!' : '¡Buen intento!'}</h3><p>Puntaje: <b>${score}</b> de ${max}</p><p class="won">+${res.coins} ${coinIc()} · más diversión</p>
         <div class="row"><button type="button" class="btn primary" data-again>Jugar otra vez</button><button type="button" class="btn" data-close>Listo</button></div></div>`;
-      const v = new PetView(node.querySelector('.go-pet')); v.setTemp(ok ? 'happy' : 'sad', 9e9); v.render(true);
+      liveView(node.querySelector('.go-pet'), ok ? 'happy' : 'sad');
       node.querySelector('[data-again]').onclick = () => startGame(id);
       node.querySelector('[data-close]').onclick = () => closeSheet();
     };
-    sheetName = 'game';
-    currentSheet = { live: false };
-    host().sheet({ catch: 'Atrapá la comida', guess: '¿Para dónde mira?', memory: 'Memoria', bubbles: 'Burbujas' }[id], node, { onClose: () => { sheetName = null; game && game.stop(); }, wide: true });
+    if (gameLocked(id) || !N.games[id]) { closeSheet(); return; }
+    showSheet('game', (C.GAMES[id] || {}).name || 'Jugar', node, { live: false, onClose: () => { game && game.stop(); } }, true);
     game = N.games[id](node, finish);
   }
 
@@ -621,14 +738,23 @@
     if (!m) return pump();
     modalOpen = m;
     host().modal(m.node, { persistent: m.persistent });
+    plat.layerChanged();
     m.node.addEventListener('click', (e) => {
       if (e.target.closest('[data-ok]')) { snd.unlock(); if (m.onOk && m.onOk() === false) return; closeModal(); }
     });
   }
-  function closeModal() { modalOpen = null; host().modalClose(); setTimeout(() => { pump(); flow(); }, 50); }
+  function closeModal() { modalOpen = null; host().modalClose(); plat.layerChanged(); setTimeout(() => { pump(); flow(); }, 50); }
+  // "Atrás" sobre una ventana común (premio, nivel nuevo) es como tocar su botón; las importantes no se cierran.
+  function backOnModal() {
+    if (!modalOpen) return false;
+    if (modalOpen.persistent) return false;
+    if (modalOpen.onOk && modalOpen.onOk() === false) return true;
+    closeModal();
+    return true;
+  }
 
   function adoptModal() {
-    let pick = null;
+    let pick = null, eggAnim = null;
     const node = h(`<div class="modal adopt">
       <h2>Elegí tu huevo</h2>
       <p class="sub">Va a nacer, crecer y depender de vos. ¡Cuidalo bien!</p>
@@ -641,6 +767,11 @@
       snd.unlock(); snd.play('tap');
       pick = b.dataset.sp;
       node.querySelectorAll('.egg-pick').forEach((x) => x.classList.toggle('on', x === b));
+      // sólo el huevo elegido se bambolea (los cuatro a la vez gastaban batería de más)
+      if (eggAnim) eggAnim.stop();
+      const art1 = b.querySelector('.ep-art');
+      art1.innerHTML = art.eggSVG({ species: pick, progress: 80, warmth: 70 });
+      if (N.petAnim) eggAnim = N.petAnim({ svg: () => (art1.isConnected ? art1.firstElementChild : null), autoStop: true, ms: { egg: 70 } });
       node.querySelector('[data-ok]').disabled = false;
       const inp = node.querySelector('#adopt-name');
       if (!inp.value) inp.placeholder = { dragon: 'Ej.: Chispa', bird: 'Ej.: Pío', lizard: 'Ej.: Lagartijo', turtle: 'Ej.: Manuelita' }[pick];
@@ -712,7 +843,7 @@
     else if (e.type === 'grow') { title = `¡${esc(p.name)} es adulto!`; sub = e.variant === 'shiny' ? '¡Lo cuidaste tan bien que tiene una forma brillante!' : 'Ya es grande. ¡Felicitaciones por cuidarlo!'; }
     else return null;
     const node = h(`<div class="modal celebrate"><div class="cel-pet"></div><h2>${title}</h2><p class="sub">${sub}</p>${e.coins ? `<p class="prize small">+${e.coins} ${coinIc()}</p>` : ''}<button type="button" class="btn primary big" data-ok>¡Genial!</button></div>`);
-    const v = new PetView(node.querySelector('.cel-pet')); v.setTemp('happy', 9e9); v.render(true);
+    liveView(node.querySelector('.cel-pet'), 'happy');
     snd.play(e.type === 'hatch' ? 'hatch' : 'grow');
     return { node };
   }
@@ -723,7 +854,7 @@
     const max = e.level >= C.R.maxLevel;
     const node = h(`<div class="modal celebrate"><div class="cel-pet"></div><span class="lvbadge">${e.level}</span><h2>${max ? '¡' + esc(p.name) + ' llegó al nivel máximo!' : '¡' + esc(p.name) + ' llegó al nivel ' + e.level + '!'}</h2>
       <p class="sub">${max ? 'Nivel 100: sos un cuidador de leyenda.' : 'Seguí cuidándolo para llegar al nivel 100.'}</p><p class="prize small">+${e.coins} ${coinIc()}</p><button type="button" class="btn primary big" data-ok>¡Genial!</button></div>`);
-    const v = new PetView(node.querySelector('.cel-pet')); v.setTemp('happy', 9e9); v.render(true);
+    liveView(node.querySelector('.cel-pet'), 'happy');
     snd.play('grow');
     return { node };
   }
@@ -743,7 +874,7 @@
     const node = h(`<div class="modal offline"><div class="cel-pet"></div><h2>Mientras no estabas…</h2><p class="sub">Pasaron ${hrs < 1 ? Math.round(gap / C.MIN) + ' minutos' : hrs < 48 ? Math.round(hrs) + ' horas' : Math.round(hrs / 24) + ' días'}.</p>
       <ul class="news">${lines.map((l) => `<li>${l}</li>`).join('')}${nd.map((x) => `<li class="need">${esc(x.text)}</li>`).join('')}</ul>
       <button type="button" class="btn primary big" data-ok>Voy a cuidarlo</button></div>`);
-    const v = new PetView(node.querySelector('.cel-pet')); v.render(true);
+    liveView(node.querySelector('.cel-pet'));
     return { node };
   }
 
@@ -768,7 +899,37 @@
   const lastNotify = {};
   function askNotify() {
     if (host().kind === 'desktop') return;
+    if (plat.canSchedule) { plat.askNotifyPermission(); return; }
     try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {}
+  }
+
+  /* Avisos con la app cerrada (app de Android): al salir se programan los próximos pedidos de la mascota,
+     calculados con el mismo motor del juego, y al volver se borran. De noche (22 a 8) no suena nada:
+     los avisos que caerían de noche se pasan a las 8 de la mañana. */
+  function scheduleAway() {
+    if (!plat.canSchedule) return;
+    const S = C.state, p = S.pet;
+    if (!S.settings.notify || !p || p.dead) { plat.cancelScheduled(); return; }
+    const t = Date.now(), items = [], used = {};
+    const morning = (ms) => { const d = new Date(ms), hr = d.getHours(); if (hr >= 22 || hr < 8) { if (hr >= 22) d.setDate(d.getDate() + 1); d.setHours(8, 0, 0, 0); return d.getTime(); } return ms; };
+    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    if (p.stage !== 'egg') {
+      C.predict(36 * C.HOUR, 5 * C.MIN).forEach((ev) => {
+        if (ev.at - t < 10 * C.MIN) return;
+        if (ev.id === 'death') { items.push({ at: morning(Math.max(t + 30 * C.MIN, ev.at - 4 * C.HOUR)), title: p.name + ' está muy débil', body: '¡Entrá a cuidarlo antes de que sea tarde!' }); return; }
+        const key = ev.id + ev.level; if (used[key]) return; used[key] = 1;
+        const a = C.ASKS[ev.id]; if (!a) return;
+        items.push({ at: morning(ev.at), title: p.name, body: pick(ev.level === 2 ? a.u : a.a) });
+      });
+    }
+    // premio diario de mañana
+    const tm = new Date(t); tm.setDate(tm.getDate() + 1); tm.setHours(10, 0, 0, 0);
+    if (!C.dailyPending()) items.push({ at: tm.getTime(), title: 'Virtual Pet', body: '¡Tu premio diario te espera!' });
+    items.sort((a, b) => a.at - b.at);
+    // como mucho un aviso cada 45 minutos
+    const out = [];
+    items.forEach((it) => { if (!out.length || it.at - out[out.length - 1].at >= 45 * C.MIN) out.push(it); });
+    plat.schedule(out.slice(0, 6));
   }
   function notify(need) {
     const S = C.state;
@@ -805,6 +966,11 @@
       fx(H.petBox(), 'coins', { n: e.coins });
       setTimeout(() => say('Nuevo logro: ' + e.name + ' (+' + e.coins + ' monedas)', false, 3500), 400);
     }
+    else if (e.type === 'purchase') {
+      snd.play('coin');
+      fx(H.petBox(), 'coins', { n: e.coins });
+      say('¡Llegaron ' + e.coins + ' monedas!', false, 3000);
+    }
     else if (e.type === 'nightSleep') { snd.play('sleep'); say('Ya es de noche… se quedó dormido', false, 3000); }
     else if (e.type === 'levelup') {
       fx(H.petBox(), 'coins', { n: e.coins });
@@ -814,6 +980,10 @@
     }
     if (p && e.type !== 'death') H.onPetEvent && H.onPetEvent(e);
   }
+
+  let loopT = 0, loopMs = 0;
+  function startLoop(ms) { if (loopT && loopMs === ms) return; clearInterval(loopT); loopMs = ms; loopT = setInterval(loop, ms); }
+  function stopLoop() { clearInterval(loopT); loopT = 0; loopMs = 0; }
 
   function loop() {
     if (C.tick() === null) { onResume(); return; }
@@ -857,8 +1027,25 @@
     H.init();
     buildPanel(H.panelRoot());
     onResume();
-    setInterval(loop, 1000);
-    document.addEventListener('visibilitychange', () => { if (document.hidden) C.save(); else onResume(); });
+    startLoop(1000);
+    // En segundo plano el reloj del juego se detiene (no gasta batería): al volver se simula el tiempo que pasó.
+    plat.onLifecycle((active) => {
+      if (!active) {
+        C.save();
+        // en la página web abierta en una pestaña de la compu, sigue revisando de a poco para poder avisar
+        const webNotify = plat.kind === 'web' && C.state.settings.notify && window.Notification && Notification.permission === 'granted';
+        if (webNotify) startLoop(60e3); else stopLoop();
+        scheduleAway();
+      } else {
+        plat.cancelScheduled && plat.cancelScheduled();
+        onResume();
+        startLoop(1000);
+      }
+    });
+    // Botón "atrás" del celular: cierra lo que esté abierto en vez de salir del juego
+    plat.setLayersQuery(() => !!(modalOpen || sheetName));
+    plat.onBack(() => { if (modalOpen) return backOnModal(); if (sheetName) { closeSheet(); return true; } return false; });
+    if (N.billing) N.billing.init();
     window.addEventListener('pagehide', () => C.save());
     window.addEventListener('beforeunload', () => C.save());
     // Modo de prueba: Ctrl+Shift+D acelera el tiempo x120
@@ -871,5 +1058,5 @@
     });
   }
 
-  N.ui = { start, doIdle: (a) => doIdle(a), PetView, fx, say, openSheet, closeSheet, h, esc, ic, coinIc, warmEgg, doAct, pushModal, flow, get modalOpen() { return modalOpen; }, get sheetOpen() { return sheetName; } };
+  N.ui = { start, doIdle: (a) => doIdle(a), PetView, liveView, fx, say, openSheet, closeSheet, h, esc, ic, coinIc, warmEgg, doAct, pushModal, flow, saverOn, scheduleAway, get modalOpen() { return modalOpen; }, get sheetOpen() { return sheetName; } };
 })();

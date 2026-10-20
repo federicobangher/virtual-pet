@@ -71,13 +71,13 @@ button:disabled { cursor: not-allowed; }
 .meter .mi .ic { width: 16px; height: 16px; }
 .meter .ml { grid-column: 1 / 3; text-align: center; font-size: .68rem; font-weight: 800; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
 .bar { display: block; height: 9px; border-radius: 9px; background: #efe6d8; overflow: hidden; border: 1.5px solid rgba(42, 31, 61, .18); }
-.bar i { display: block; height: 100%; border-radius: inherit; transition: width .6s ease; }
+.bar i { display: block; height: 100%; width: 100%; border-radius: inherit; transform: translateX(-100%); transition: transform .6s ease; }
 .m-food .mi, .m-food .bar i { background: var(--m-food); }
 .m-energy .mi, .m-energy .bar i { background: var(--m-energy); }
 .m-fun .mi, .m-fun .bar i { background: var(--m-fun); }
 .m-hygiene .mi, .m-hygiene .bar i { background: var(--m-hygiene); }
 .m-health .mi, .m-health .bar i { background: var(--m-health); }
-.meter.low .mi { animation: pulse 1s ease-in-out infinite; }
+.meter.low.ping .mi { animation: pulse 1s ease-in-out 3; }
 .meter.low .ml { color: var(--berry); }
 @keyframes pulse { 50% { transform: scale(1.12); } }
 
@@ -220,6 +220,7 @@ button:disabled { cursor: not-allowed; }
    ================================================================= */
 body.mode-room { background: #2a1f3d; overflow: hidden; }
 .mode-room #app { height: 100%; }
+@supports (height: 100dvh) { body.mode-room, .mode-room #app { height: 100dvh; } }
 .room-app { height: 100%; max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; background: var(--paper); position: relative; }
 .scene { position: relative; flex: 1 1 auto; min-height: 240px; overflow: hidden; --floor: 30%; }
 .wall { position: absolute; inset: 0 0 var(--floor) 0; background:
@@ -265,8 +266,7 @@ body.mode-room { background: #2a1f3d; overflow: hidden; }
 .poops { position: absolute; left: 0; right: 0; bottom: 6%; height: 0; z-index: 2; }
 .poop { position: absolute; bottom: 0; width: 46px; height: 40px; padding: 0; border: 0; background: none; transform: translateX(-50%); }
 .poop svg { width: 100%; height: 100%; }
-.poop .stink { animation: stink 1.6s ease-in-out infinite; }
-@keyframes stink { 50% { transform: translateY(-3px); opacity: .5; } }
+/* el olorcito se anima desde js/room.js, al mismo ritmo que la mascota */
 .fastbadge { position: absolute; top: 8px; right: 8px; z-index: 8; background: var(--berry); color: #fff; font-weight: 800; border-radius: 8px; padding: 2px 8px; display: none; }
 body.fast .fastbadge { display: block; }
 
@@ -274,12 +274,12 @@ body.fast .fastbadge { display: block; }
 .room-app::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 0; }
 
 .sheet-wrap { position: fixed; inset: 0; z-index: 50; background: rgba(42, 31, 61, .45); display: flex; align-items: flex-end; justify-content: center; animation: fade .18s ease-out; }
-.sheet { width: 100%; max-width: 560px; max-height: 86%; display: flex; flex-direction: column; background: var(--paper); border: 3px solid var(--ink); border-bottom: 0; border-radius: 24px 24px 0 0; animation: slide-up .22s ease-out; }
+.sheet { width: 100%; max-width: 560px; max-height: min(86%, calc(100% - env(safe-area-inset-top, 0px) - 20px)); display: flex; flex-direction: column; background: var(--paper); border: 3px solid var(--ink); border-bottom: 0; border-radius: 24px 24px 0 0; animation: slide-up .22s ease-out; }
 .sheet header { display: flex; align-items: center; justify-content: space-between; padding: 14px max(16px, env(safe-area-inset-right, 0px)) 6px max(16px, env(safe-area-inset-left, 0px)); }
 .sheet h3 { font-family: var(--f-display); font-size: 1.35rem; margin: 0; }
 .sheet .x { width: 40px; height: 40px; display: grid; place-items: center; border: 2px solid var(--ink); border-radius: 12px; background: #fff; box-shadow: 0 2px 0 var(--ink); }
 .sheet-body { overflow-y: auto; padding: 8px max(16px, env(safe-area-inset-right, 0px)) max(20px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
-.modal-wrap { position: fixed; inset: 0; z-index: 60; background: rgba(42, 31, 61, .6); display: grid; place-items: center; padding: 16px; animation: fade .2s ease-out; overflow-y: auto; }
+.modal-wrap { position: fixed; inset: 0; z-index: 60; background: rgba(42, 31, 61, .6); display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px)); animation: fade .2s ease-out; overflow-y: auto; }
 .modal-box { width: 100%; max-width: 440px; background: var(--paper); border: 3px solid var(--ink); border-radius: 26px; padding: 22px 18px; box-shadow: 0 6px 0 var(--ink); animation: pop-in .28s cubic-bezier(.2, 1.4, .5, 1); }
 @keyframes fade { from { opacity: 0; } }
 @keyframes slide-up { from { transform: translateY(40px); opacity: .5; } }
@@ -346,7 +346,6 @@ html.desk, body.mode-desktop { background: transparent !important; overflow: hid
 
 /* En el escritorio la mascota se anima con un reloj propio a 10 cuadros por segundo (desktop.js),
    así que se apagan las animaciones CSS, que Chromium recalcula 60 veces por segundo. */
-body.mode-desktop .dpet svg.pet, body.mode-desktop .dpet svg.pet * { animation: none !important; }
 body.mode-desktop .meter.low .mi { animation: none; }
 
 /* ---------- nivel ---------- */
@@ -366,8 +365,8 @@ body.mode-desktop .meter.low .mi { animation: none; }
 .needicon { position: absolute; top: 30%; left: 80%; transform: translate(-50%, -50%); z-index: 6; width: 36px; height: 36px; display: grid; place-items: center; padding: 0; border-radius: 50%; border: 2px solid var(--ink); background: #fff; color: var(--plum); box-shadow: 0 2px 0 var(--ink); cursor: pointer; }
 .needicon .ic { width: 20px; height: 20px; }
 .needicon.urgent { background: var(--berry); color: #fff; }
-.mode-room .needicon { animation: need-bob 1.4s ease-in-out infinite; }
-.mode-room .needicon.urgent { animation-duration: .7s; }
+.mode-room .needicon.ping { animation: need-bob 1.4s ease-in-out 3; }
+.mode-room .needicon.urgent.ping { animation-duration: .7s; animation-iteration-count: 5; }
 @keyframes need-bob { 50% { transform: translate(-50%, calc(-50% - 5px)); } }
 
 .dpet .needicon { width: 30px; height: 30px; }
@@ -459,11 +458,10 @@ body.mode-desktop .meter.low .mi { animation: none; }
 /* =================================================================
    RENDIMIENTO
    ================================================================= */
-/* En el cuarto también se anima con el reloj propio (js/anim.js), a pocos cuadros por segundo. */
-.mode-room .petbox svg.pet, .mode-room .petbox svg.pet *, .mode-room .poop .stink { animation: none !important; }
-/* Las fotos del álbum son fotos: quietas */
-.ph-pet svg.pet, .ph-pet svg.pet * { animation: none !important; }
+/* La mascota se anima con el reloj propio (js/anim.js), a pocos cuadros por segundo; para caminar,
+   la caja se desliza con una transición de transform, que la hace la placa de video sin usar JavaScript. */
 .petbox { will-change: transform; }
+.ph-pet svg.pet *, .ep-art svg.pet * { transition: none; }
 
 /* =================================================================
    TAMAÑOS: la mascota se adapta al lugar que tiene (celular, tablet, compu)
@@ -527,3 +525,31 @@ body.mode-desktop .meter.low .mi { animation: none; }
 /* globito: los textos largos (logros) pasan a dos renglones en vez de salirse del globo */
 .bubble { white-space: normal; width: max-content; max-width: min(300px, 86vw); text-align: center; line-height: 1.25; }
 .dpet .bubble { max-width: min(270px, calc(100vw - 12px)); }
+
+/* =================================================================
+   1.8: monedas, juegos que se desbloquean, ahorro de batería
+   ================================================================= */
+.packs { display: grid; gap: 10px; }
+.pack { display: grid; grid-template-columns: 52px 1fr auto; gap: 10px; align-items: center; background: linear-gradient(135deg, #fff8dc, #fff); border: 2px solid var(--yolk-d); border-radius: 16px; padding: 8px 10px; }
+.pack .item-art { background: #fff3c4; }
+.pack .pk-coins { font-family: var(--f-display); font-size: 1.15rem; display: inline-flex; align-items: center; gap: 2px; }
+.pack .pk-tag { display: inline-block; font-size: .72rem; font-weight: 800; color: #fff; background: var(--mint); border-radius: 999px; padding: 1px 8px; margin-left: 4px; vertical-align: 2px; }
+.pack .btn { min-width: 6.5em; }
+.pack-note { font-size: .78rem; }
+.pack-err { color: var(--berry); font-weight: 800; font-size: .85rem; margin: 0; }
+.game-card { position: relative; }
+.game-card.locked { background: #f6f1ff; }
+.game-card.locked .gc-art { filter: saturate(.5); }
+.game-card .gc-lock { position: absolute; top: 10px; right: 10px; display: inline-flex; align-items: center; gap: 4px; font-weight: 800; font-size: .85rem; background: #fff; border: 2px solid var(--ink); border-radius: 999px; padding: 2px 10px; box-shadow: 0 2px 0 var(--ink); }
+.game-card .gc-lock .ic { width: 15px; height: 15px; }
+.game-card .gc-new { position: absolute; top: -8px; left: 12px; font-size: .7rem; font-weight: 800; color: #fff; background: var(--berry); border-radius: 999px; padding: 1px 8px; border: 2px solid var(--ink); }
+.toggle small { display: block; font-size: .76rem; color: var(--ink-soft); font-weight: 600; }
+/* Simón dice */
+.g-simon { display: grid; gap: 10px; text-align: center; }
+.simon { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: min(320px, 78vw); aspect-ratio: 1; margin: 0 auto; }
+.simon button { border: 3px solid var(--ink); border-radius: 22px; box-shadow: 0 4px 0 var(--ink); display: grid; place-items: center; padding: 0; opacity: .72; transition: opacity .08s, transform .08s; }
+.simon button svg { width: 52%; height: 52%; }
+.simon button.on { opacity: 1; transform: scale(1.04); box-shadow: 0 0 0 4px #fff, 0 4px 0 var(--ink); }
+.simon button:disabled { cursor: default; }
+.simon .s0 { background: #ff8a3d; } .simon .s1 { background: #5b7cff; } .simon .s2 { background: #22b07d; } .simon .s3 { background: #ff5d9e; }
+@media (orientation: landscape) and (max-height: 600px) { .simon { width: min(240px, 52vh); } }
