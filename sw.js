@@ -1,5 +1,5 @@
 /* Virtual Pet — service worker: guarda el juego para que funcione sin internet. */
-const VERSION = 'vpet-v1.8.1';
+const VERSION = 'vpet-v1.9.0';
 const FILES = [
   './', './index.html', './manifest.webmanifest',
   './css/pet.css', './css/style.css',
@@ -8,7 +8,10 @@ const FILES = [
   './icons/icon-192.png', './icons/icon-256.png', './icons/icon-512.png', './icons/maskable-512.png',
 ];
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+  // cache: 'reload' = pedir cada archivo de nuevo al servidor. Sin esto, la versión nueva podía guardar
+  // archivos viejos que el navegador tenía en su caché (GitHub Pages los guarda 10 minutos) y quedaban
+  // mezclados archivos de dos versiones: el juego fallaba o "se colgaba" después de actualizar.
+  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim()));

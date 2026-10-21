@@ -471,12 +471,14 @@
   /* ============ paquetes de monedas (Google Play) ============ */
   const BL = () => N.billing || { enabled: false };
   let packBusy = '';
+  // (una sola suscripción a la tienda de Google: antes se sumaba una nueva cada vez que se abría la tienda)
+  let billingFn = null, billingSub = false;
   function onBilling(fn) {
     const b = BL();
     if (!b.onChange) return null;
-    let alive = true;
-    b.onChange(() => { if (alive) fn(); });
-    return () => { alive = false; };
+    if (!billingSub) { billingSub = true; b.onChange(() => { if (billingFn) billingFn(); }); }
+    billingFn = fn;
+    return () => { if (billingFn === fn) billingFn = null; };
   }
   function packsHTML() {
     const b = BL();
@@ -597,6 +599,7 @@
             <input type="file" id="import-file" accept=".json,application/json" hidden>
             <div class="confirm-import" hidden><p class="note warn">Se va a reemplazar la partida actual por la del archivo.</p><div class="row"><button type="button" class="btn danger-fill" data-import-yes>Recuperar</button><button type="button" class="btn" data-import-no>Cancelar</button></div></div>
           </section>
+          ${errorsHTML()}
           <section class="about"><h4>${ic('heart')} Acerca de</h4>
             <p class="about-txt"><b>${N.APP.name}</b> · versión ${N.APP.version}<br>Creado por <b>${N.APP.author}</b></p>
           </section>
@@ -634,6 +637,8 @@
         if (e.target.closest('[data-reset-yes]')) { snd.play('tap'); closeSheet(); C.act.resetAll(); }
         const op = e.target.closest('[data-open]'); if (op) { snd.play('tap'); openSheet(op.dataset.open); return; }
         if (e.target.closest('[data-export]')) exportSave();
+        if (e.target.closest('[data-err-copy]')) copyErrors();
+        if (e.target.closest('[data-err-clear]')) { plat.clearErrors && plat.clearErrors(); render(); }
         if (e.target.closest('[data-import]')) node.querySelector('#import-file').click();
         if (e.target.closest('[data-import-no]')) { node.querySelector('.confirm-import').hidden = true; pendingImport = null; }
         if (e.target.closest('[data-import-yes]')) {
@@ -649,6 +654,19 @@
     },
   };
   let pendingImport = null;
+  // Informe de errores: si algo falló, se puede copiar y mandar (sólo aparece si hubo errores)
+  function errorsHTML() {
+    const list = plat.errors ? plat.errors() : [];
+    if (!list.length) return '';
+    return `<section class="errs"><h4>${ic('help')} Informe de errores</h4><p class="note">Hubo ${list.length} error${list.length > 1 ? 'es' : ''}. El juego sigue andando, pero si querés que lo arreglen, copiá el informe y mandalo.</p>` +
+      `<pre class="errlog">${esc(list.slice(-5).map((x) => x.t.slice(5, 16).replace('T', ' ') + ' ' + x.m).join('\n'))}</pre>` +
+      `<div class="row"><button type="button" class="btn" data-err-copy>Copiar informe</button><button type="button" class="btn ghost" data-err-clear>Borrar</button></div></section>`;
+  }
+  function copyErrors() {
+    const txt = 'Virtual Pet ' + N.APP.version + ' · ' + (plat.kind || '') + ' · ' + navigator.userAgent + '\n' + JSON.stringify(plat.errors ? plat.errors() : [], null, 1);
+    const ok = () => say('Informe copiado', false, 2000), bad = () => say('No se pudo copiar', true, 2000);
+    try { navigator.clipboard.writeText(txt).then(ok, bad); } catch (e) { bad(); }
+  }
   function exportSave() {
     const txt = C.exportState();
     const p = C.state.pet;
@@ -985,17 +1003,23 @@
   function startLoop(ms) { if (loopT && loopMs === ms) return; clearInterval(loopT); loopMs = ms; loopT = setInterval(loop, ms); }
   function stopLoop() { clearInterval(loopT); loopT = 0; loopMs = 0; }
 
+  // Cada parte del ciclo va protegida: si una falla (y queda anotada en el registro de errores), las demás
+  // siguen andando. Antes, un error en una parte cortaba el resto de esa vuelta: el juego parecía colgado
+  // (no guardaba, no pedía nada, no actualizaba el panel).
+  function safe(fn, where) { try { fn(); } catch (e) { console.error(e); if (plat.logError) plat.logError(e && e.message, where + (e && e.stack ? ' | ' + String(e.stack).split('\n')[1] : '')); } }
   function loop() {
-    if (C.tick() === null) { onResume(); return; }
+    let gap = false;
+    safe(() => { if (C.tick() === null) gap = true; }, 'tick');
+    if (gap) { safe(onResume, 'resume'); return; }
     const t = Date.now();
-    updatePanel();
-    H.update && H.update();
-    checkNeeds(t);
-    idleActs(t);
-    if (t - lastSave > 15e3) { lastSave = t; C.save(); }
-    if (t - lastDayCheck > 60e3) { lastDayCheck = t; checkDaily(); }
-    if (sheetName && sheetName !== 'game' && ++loops % 5 === 0) refreshSheet();
-    flow();
+    safe(updatePanel, 'panel');
+    safe(() => { H.update && H.update(); }, 'host');
+    safe(() => checkNeeds(t), 'pedidos');
+    safe(() => idleActs(t), 'gestos');
+    if (t - lastSave > 15e3) { lastSave = t; safe(C.save, 'guardar'); }
+    if (t - lastDayCheck > 60e3) { lastDayCheck = t; safe(checkDaily, 'premio'); }
+    if (sheetName && sheetName !== 'game' && ++loops % 5 === 0) safe(refreshSheet, 'hoja');
+    safe(flow, 'flujo');
   }
 
   function onResume() {
@@ -1027,6 +1051,8 @@
     H.init();
     buildPanel(H.panelRoot());
     onResume();
+    // (antes el fondo del cuarto recién aparecía al segundo de abrir: se veía un cuarto vacío un momento)
+    safe(() => { H.update && H.update(); }, 'host');
     startLoop(1000);
     // En segundo plano el reloj del juego se detiene (no gasta batería): al volver se simula el tiempo que pasó.
     plat.onLifecycle((active) => {
@@ -1045,6 +1071,8 @@
     // Botón "atrás" del celular: cierra lo que esté abierto en vez de salir del juego
     plat.setLayersQuery(() => !!(modalOpen || sheetName));
     plat.onBack(() => { if (modalOpen) return backOnModal(); if (sheetName) { closeSheet(); return true; } return false; });
+    let exitHintT = 0;
+    plat.onBackExitHint = () => { const t = Date.now(); if (t - exitHintT > 3000) { exitHintT = t; say('Tocá "atrás" otra vez para salir', false, 2200); } };
     if (N.billing) N.billing.init();
     window.addEventListener('pagehide', () => C.save());
     window.addEventListener('beforeunload', () => C.save());

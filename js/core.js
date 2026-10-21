@@ -3,7 +3,7 @@
   'use strict';
   const N = (window.N = window.N || {});
   const MIN = 60e3, HOUR = 3600e3, DAY = 24 * HOUR;
-  N.APP = { name: 'Virtual Pet', version: '1.8.1', author: 'Facundo Bangher' };
+  N.APP = { name: 'Virtual Pet', version: '1.9.0', author: 'Facundo Bangher' };
 
   const SPECIES = {
     dragon: { name: 'Dragón', fav: 'Carne asada', egg: 'Huevo escamado', hint: 'Comilón: le da hambre seguido' },
@@ -122,7 +122,7 @@
   /* --------- eventos --------- */
   const listeners = {};
   N.on = (ev, fn) => ((listeners[ev] = listeners[ev] || []).push(fn), fn);
-  N.emit = (ev, data) => (listeners[ev] || []).slice().forEach((fn) => { try { fn(data); } catch (e) { console.error(e); } });
+  N.emit = (ev, data) => (listeners[ev] || []).slice().forEach((fn) => { try { fn(data); } catch (e) { console.error(e); if (N.platform && N.platform.logError) N.platform.logError(e && e.message, 'evento ' + ev); } });
 
   /* --------- estado --------- */
   function freshState() {

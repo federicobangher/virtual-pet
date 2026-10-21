@@ -16,7 +16,24 @@
   let E = {}, view;
   let x = 50, poopKey = '', sceneW = 0, placed = '';
 
+  /* Alto real de la pantalla. En algunos celulares Android (y con la app instalada desde la página) "100%"
+     o "100dvh" incluyen la franja de los botones de Android: el juego quedaba más alto que la pantalla y la
+     segunda fila de botones (Dormir, Remedio, Tienda, Más) se cortaba abajo. Ahora se mide lo que de verdad
+     se ve y se usa ese alto. */
+  function fitHeight() {
+    const vv = window.visualViewport;
+    let hgt = window.innerHeight;
+    if (vv && vv.height > 100 && vv.height < hgt && vv.scale <= 1.01) hgt = vv.height;
+    const v = Math.round(hgt) + 'px';
+    const root = document.documentElement;
+    if (root.style.getPropertyValue('--app-h') !== v) root.style.setProperty('--app-h', v);
+  }
+
   host.init = function () {
+    fitHeight();
+    window.addEventListener('resize', fitHeight);
+    window.addEventListener('orientationchange', () => setTimeout(fitHeight, 250));
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', fitHeight);
     document.body.classList.add('mode-room');
     const app = document.getElementById('app');
     app.innerHTML = `

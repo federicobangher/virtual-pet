@@ -20,8 +20,9 @@
   const backHandlers = [];
   plat.onBack = (fn) => { backHandlers.push(fn); };
   const handleBack = () => { for (let i = backHandlers.length - 1; i >= 0; i--) { try { if (backHandlers[i]()) return true; } catch (e) { /* seguir */ } } return false; };
-  let guard = false, ignorePop = 0, layersOpen = () => false;
+  let guard = false, layersOpen = () => false;
   plat.setLayersQuery = (fn) => { layersOpen = fn; };
+  plat.onBackExitHint = null; // (la interfaz pone acá un aviso "tocá atrás otra vez para salir")
   if (native && P.App && P.App.addListener) {
     P.App.addListener('backButton', () => {
       if (handleBack()) return;
@@ -29,27 +30,20 @@
     });
     plat.layerChanged = () => {};
   } else if (kind === 'web') {
-    // En el navegador (y en la PWA instalada) se usa el historial: mientras haya algo abierto hay una
-    // entrada de más, así "atrás" la consume en vez de salir de la página.
+    // En el navegador y en la app instalada desde la página (PWA) se usa el historial: cuando algo se abre se
+    // agrega UNA entrada, así "atrás" la consume y cierra la hoja en vez de salir del juego.
+    // El juego nunca llama a history.back(): en la 1.8 lo hacía al cerrar una hoja con la X y, si se
+    // desincronizaba, el celular salía de la app o la recargaba (parecía que el juego se colgaba).
+    // Si la entrada queda de más (cerraste la hoja con la X), el próximo "atrás" no hace nada y avisa.
     window.addEventListener('popstate', () => {
-      if (ignorePop) { ignorePop--; return; }
-      guard = false; clearTimeout(closeT); closeT = 0;
-      handleBack();
-      if (layersOpen()) { history.pushState({ vpet: 1 }, ''); guard = true; }
-    });
-    // Abrir algo agrega la entrada enseguida. Cerrar espera un momento: si enseguida se abre otra cosa
-    // (de "Más" a "Logros", o la ventana siguiente de la fila) la entrada se reutiliza en vez de sacarla y
-    // volverla a poner, porque esos ida y vuelta del historial se pisan entre sí.
-    let closeT = 0;
-    const reconcile = () => {
-      closeT = 0;
-      if (!layersOpen() && guard) { guard = false; ignorePop++; try { history.back(); } catch (e) { ignorePop--; } }
-    };
-    plat.layerChanged = () => {
+      guard = false;
       if (layersOpen()) {
-        clearTimeout(closeT); closeT = 0;
-        if (!guard) { try { history.pushState({ vpet: 1 }, ''); guard = true; } catch (e) { /* sin historial */ } }
-      } else if (guard && !closeT) closeT = setTimeout(reconcile, 200);
+        handleBack();
+        if (layersOpen()) { try { history.pushState({ vpet: 1 }, ''); guard = true; } catch (e) { /* nada */ } } // ventana que no se cierra
+      } else if (plat.onBackExitHint) plat.onBackExitHint();
+    });
+    plat.layerChanged = () => {
+      if (layersOpen() && !guard) { try { history.pushState({ vpet: 1 }, ''); guard = true; } catch (e) { /* sin historial */ } }
     };
   } else plat.layerChanged = () => {};
 
@@ -61,6 +55,25 @@
   document.addEventListener('visibilitychange', () => setActive(!document.hidden));
   if (native && P.App && P.App.addListener) P.App.addListener('appStateChange', (s) => setActive(!!s.isActive));
   window.addEventListener('pagehide', () => setActive(false));
+  window.addEventListener('pageshow', () => setActive(!document.hidden)); // vuelve de la caché del navegador
+
+  /* ---------- registro de errores ----------
+     Si algo falla, queda anotado (los últimos 20) para poder verlo en Más → Informe de errores y mandarlo. */
+  const ERR_KEY = 'vpet.errores';
+  plat.errors = () => { try { return JSON.parse(localStorage.getItem(ERR_KEY) || '[]'); } catch (e) { return []; } };
+  plat.clearErrors = () => { try { localStorage.removeItem(ERR_KEY); } catch (e) { /* nada */ } };
+  plat.logError = (msg, where) => {
+    try {
+      const list = plat.errors();
+      const v = (N.APP && N.APP.version) || '?';
+      const item = { t: new Date().toISOString(), v, k: kind, m: String(msg || '').slice(0, 300), w: String(where || '').slice(0, 200) };
+      const last = list[list.length - 1];
+      if (last && last.m === item.m && last.w === item.w) { last.n = (last.n || 1) + 1; last.t = item.t; } else list.push(item);
+      localStorage.setItem(ERR_KEY, JSON.stringify(list.slice(-20)));
+    } catch (e) { /* sin almacenamiento */ }
+  };
+  window.addEventListener('error', (e) => plat.logError(e.message, (e.filename || '').split('/').pop() + ':' + e.lineno + ':' + e.colno));
+  window.addEventListener('unhandledrejection', (e) => plat.logError(e.reason && (e.reason.message || e.reason), 'promesa'));
   Object.defineProperty(plat, 'active', { get: () => active });
 
   /* ---------- batería ----------

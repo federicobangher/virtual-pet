@@ -31,7 +31,7 @@
   let mode = 'free';                                 // free | follow | fall | drag
   let walking = false, flying = false, target = null, idleUntil = 0, lastFrame = 0, walkingPrev = false;
   let cursor = { x: -1, y: -1 };
-  let ignoring = true, hiddenAll = false, cardOpen = false;
+  let hiddenAll = false, cardOpen = false;
   let drag = null, cardDrag = null;
   let cardPos = null;                                // posición del panel en pantalla
   let cardMoved = false;                             // el usuario lo movió a mano
@@ -77,11 +77,30 @@
     wa = areaOfPet(pos.x, pos.y);
   }
 
-  function setIgnore(v) {
-    if (v === ignoring) return;
-    ignoring = v;
-    D.setIgnore(v);
+  /* ---------- clics: qué partes de la ventana se pueden tocar ----------
+     La ventana es transparente y deja pasar los clics al escritorio, salvo sobre la mascota, el globito con
+     botón, el ícono de pedido y el panel. Antes Electron se enteraba de dónde estaba el mouse con un "gancho"
+     global (forward): TODOS los movimientos del mouse de la compu pasaban por Virtual Pet, y cuando el
+     programa estaba ocupado se trababa el mouse de todas las aplicaciones. Ahora la página le pasa al
+     proceso principal los rectángulos tocables y él mira la posición del mouse unas pocas veces por segundo. */
+  let hitsKey = '', hitsQueued = false;
+  const rectOf = (el) => { const r = el.getBoundingClientRect(); return { x: Math.round(r.left) - 2, y: Math.round(r.top) - 2, w: Math.round(r.width) + 4, h: Math.round(r.height) + 4 }; };
+  function sendHits() {
+    hitsQueued = false;
+    const rects = [];
+    if (!hiddenAll) {
+      if (!E.pet.hidden) rects.push(rectOf(E.hit));
+      if (!E.bubble.hidden && E.bubble.classList.contains('ask')) rects.push(rectOf(E.bubble));
+      const ni = E.pet.querySelector('.needicon:not([hidden])'); if (ni) rects.push(rectOf(ni));
+      if (cardOpen && !E.card.hidden) rects.push(rectOf(E.card));
+    }
+    const key = JSON.stringify(rects);
+    if (key === hitsKey) return;
+    hitsKey = key;
+    if (D.hitRects) D.hitRects(rects);
   }
+  function queueHits() { if (hitsQueued) return; hitsQueued = true; requestAnimationFrame(sendHits); }
+  function setHold(v) { if (D.hold) D.hold(!!v); }
 
   /* ---------- ventana: tamaño y posición ---------- */
   function cardSize() {
@@ -126,9 +145,11 @@
       D.setBounds(b);
     }
     // (mientras camina se mueve la ventana, no el dibujo: sólo se toca el estilo si de verdad cambió)
-    const sl = (el, k, v) => { v = Math.round(v) + 'px'; if (el.style[k] !== v) el.style[k] = v; };
+    let moved = false;
+    const sl = (el, k, v) => { v = Math.round(v) + 'px'; if (el.style[k] !== v) { el.style[k] = v; moved = true; } };
     sl(E.pet, 'left', pos.x - b.x); sl(E.pet, 'top', pos.y - b.y);
     if (cardOpen && cardPos) { sl(E.card, 'left', cardPos.x - b.x); sl(E.card, 'top', cardPos.y - b.y); }
+    if (moved) queueHits(); // (caminando se mueve la ventana entera: las zonas tocables no cambian)
   }
   function applyCardMax() { const v = cardMaxH() + 'px'; if (E.card.style.maxHeight !== v) E.card.style.maxHeight = v; }
   // Windows a veces no deja la ventana exactamente donde se pidió (monitores con distinta escala, ventana más
@@ -188,6 +209,7 @@
     E.hit.addEventListener('pointerdown', (e) => {
       snd.unlock();
       drag = { sx: e.screenX, sy: e.screenY, ox: e.screenX - pos.x, oy: e.screenY - pos.y, moved: false };
+      setHold(true); // mientras se arrastra, la ventana sigue tomando el mouse aunque se salga de la mascota
       try { E.hit.setPointerCapture(e.pointerId); } catch (_) {}
       wake();
     });
@@ -199,7 +221,7 @@
     const endDrag = () => {
       if (!drag) return;
       const wasClick = !drag.moved;
-      drag = null;
+      drag = null; setHold(false);
       E.pet.classList.remove('dragging');
       if (wasClick) { if (mode === 'drag') mode = 'free'; petClick(); return; }
       const p = C.state.pet;
@@ -223,7 +245,7 @@
     // mover el panel desde su encabezado
     E.head.addEventListener('pointerdown', (e) => {
       if (e.target.closest('button') || !cardPos) return;
-      cardDrag = { ox: e.screenX - cardPos.x, oy: e.screenY - cardPos.y };
+      cardDrag = { ox: e.screenX - cardPos.x, oy: e.screenY - cardPos.y }; setHold(true);
       try { E.head.setPointerCapture(e.pointerId); } catch (_) {}
     });
     E.head.addEventListener('pointermove', (e) => {
@@ -232,23 +254,18 @@
       cardMoved = true;
       layout();
     });
-    E.head.addEventListener('pointerup', () => { cardDrag = null; });
-    E.head.addEventListener('pointercancel', () => { cardDrag = null; });
+    E.head.addEventListener('pointerup', () => { cardDrag = null; setHold(false); });
+    E.head.addEventListener('pointercancel', () => { cardDrag = null; setHold(false); });
 
-    // Dejar pasar los clics salvo sobre la mascota o el panel
-    const probe = (x, y) => {
-      if (drag || cardDrag) return setIgnore(false);
-      if (hiddenAll) return setIgnore(true);
-      const el = document.elementFromPoint(x, y);
-      setIgnore(!(el && el.closest('.hit, .dcard, .bubble.ask, .needicon')));
-    };
-    document.addEventListener('mousemove', (e) => probe(e.clientX, e.clientY));
-    document.addEventListener('mouseleave', () => { if (!drag && !cardDrag) setIgnore(true); });
+    // posición del mouse: sólo llega con "Que me siga el mouse" prendido
     D.onCursor((p) => {
       cursor.x = p.x; cursor.y = p.y;
-      if (p.probe) probe(p.x - bounds.x, p.y - bounds.y);
       if (C.state.settings.follow) wake();
     });
+    // cualquier cambio de tamaño adentro (globito, ícono, panel) actualiza las zonas tocables
+    if (window.ResizeObserver) new ResizeObserver(queueHits).observe(document.getElementById('app'));
+    new MutationObserver(queueHits).observe(document.getElementById('app'), { attributes: true, subtree: true, attributeFilter: ['hidden', 'class'] });
+    queueHits();
     // se conectó o desconectó un monitor, o cambió la resolución
     D.onWorkArea((w) => {
       setAreas(w.areas ? w : { workArea: w, areas: [w] });
@@ -291,7 +308,7 @@
   function hideAll(v) {
     hiddenAll = v;
     document.getElementById('app').style.visibility = v ? 'hidden' : '';
-    if (v) setIgnore(true);
+    queueHits();
     showPoops(v ? [] : currentPoops());
     syncTray();
   }
@@ -323,14 +340,16 @@
   }
 
   /* ---------- panel ---------- */
-  function relayoutCard() { requestAnimationFrame(() => { if (!cardOpen) return; placeCardAuto(); layout(); }); }
+  // (si lo moviste a mano, se respeta dónde lo dejaste)
+  function relayoutCard() { requestAnimationFrame(() => { if (!cardOpen) return; if (cardMoved && cardPos) cardPos = clampCard(cardPos.x, cardPos.y); else placeCardAuto(); layout(); queueHits(); }); }
   function openCard() {
     if (cardOpen) { relayoutCard(); return; }
     cardOpen = true; fixTries = 0;
     E.card.hidden = false;
     applyCardMax();
     placeCardAuto(); layout(); relayoutCard();
-    D.focus();
+    // (no se le roba el foco a lo que estés usando: antes, una ventana automática como el premio diario o
+    //  "subió de nivel" te sacaba el teclado de la aplicación en la que estabas escribiendo)
   }
   function closeCard() {
     if (!E.modal.hidden) return; // las ventanas importantes no se cierran solas
@@ -340,7 +359,7 @@
     cardMoved = false;
     E.card.hidden = true;
     layout();
-    setIgnore(true);
+    queueHits();
     wake();
   }
 
@@ -367,7 +386,8 @@
     if (r.left < 4) E.bubble.style.marginLeft = (4 - r.left) + 'px';
     else if (r.right > window.innerWidth - 4) E.bubble.style.marginLeft = (window.innerWidth - 4 - r.right) + 'px';
     clearTimeout(bubbleT);
-    bubbleT = setTimeout(() => { E.bubble.hidden = true; }, ms || 2000);
+    bubbleT = setTimeout(() => { E.bubble.hidden = true; queueHits(); }, ms || 2000);
+    queueHits();
   };
 
   let sheetOpts = null;
@@ -455,27 +475,19 @@
      su propio proceso (unos 60-100 MB más de memoria mientras hubiera cacas). Ahora la abre esta misma página
      con window.open: comparte el proceso y se dibuja desde acá, sin mensajes de ida y vuelta.
      Si por algún motivo no se puede abrir, se usa la forma vieja (D.poops). */
-  let strip = null, stripIgnoring = true, useIpc = !D.poopsChild;
+  let strip = null, useIpc = !D.poopsChild;
   const POOP_CSS = 'html,body{margin:0;height:100%;background:transparent;overflow:hidden;user-select:none}' +
     'button{position:absolute;bottom:4px;width:44px;height:38px;padding:0;border:0;background:none;cursor:pointer;transform:translateX(-50%)}' +
     'button svg{width:100%;height:100%;display:block}';
   function showPoops(list) {
     if (useIpc) { D.poops(list); return; }
-    if (!list.length) { if (strip && !strip.closed) strip.close(); strip = null; return; }
+    if (!list.length) { if (strip && !strip.closed) strip.close(); strip = null; if (D.stripHits) D.stripHits([]); return; }
     if (!strip || strip.closed) {
       try { strip = window.open('', 'vpet-poops', ''); } catch (e) { strip = null; }
       if (!strip || !strip.document) { useIpc = true; strip = null; D.poops(list); return; }
       const d = strip.document;
       d.title = 'Virtual Pet';
       const st = d.createElement('style'); st.textContent = POOP_CSS; d.head.appendChild(st);
-      stripIgnoring = true;
-      d.addEventListener('mousemove', (e) => {
-        const el = d.elementFromPoint(e.clientX, e.clientY);
-        const over = !!(el && el.closest && el.closest('button'));
-        if (over === !stripIgnoring) return;
-        stripIgnoring = !over; D.poopsIgnore(stripIgnoring);
-      });
-      d.addEventListener('mouseleave', () => { if (!stripIgnoring) { stripIgnoring = true; D.poopsIgnore(true); } });
       d.addEventListener('click', (e) => {
         const b = e.target.closest && e.target.closest('button'); if (!b) return;
         snd.unlock();
@@ -486,6 +498,8 @@
     }
     const svg = N.art.poopSVG().replace(/ class="stink"/, ' class="stink" style="opacity:.8"');
     strip.document.body.innerHTML = list.map((q) => `<button type="button" data-id="${q.id}" title="Limpiar" style="left:${(4 + q.x * 92).toFixed(1)}%">${svg}</button>`).join('');
+    // zonas tocables de la franja (el resto deja pasar los clics a la barra de tareas y al escritorio)
+    if (D.stripHits) D.stripHits(list.map((q) => q.x));
   }
 
   host.update = function () {
