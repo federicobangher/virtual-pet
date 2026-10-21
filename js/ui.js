@@ -1049,6 +1049,13 @@
       H.onReset && H.onReset(); H.view().render(true); flow();
     });
     H.init();
+    // La página entera nunca debe quedar desplazada (si algo la corre, la mascota y el panel "desaparecen"):
+    // si pasa, se vuelve a su lugar. Sólo las listas de adentro se deslizan.
+    const fixRoot = (el) => { if (el && (el.scrollTop || el.scrollLeft)) { el.scrollTop = 0; el.scrollLeft = 0; } };
+    document.addEventListener('scroll', (e) => {
+      const t = e.target;
+      if (t === document || t === document.documentElement || t === document.body || (t && t.id === 'app')) { fixRoot(document.scrollingElement); fixRoot(document.body); fixRoot(document.getElementById('app')); }
+    }, true);
     buildPanel(H.panelRoot());
     onResume();
     // (antes el fondo del cuarto recién aparecía al segundo de abrir: se veía un cuarto vacío un momento)

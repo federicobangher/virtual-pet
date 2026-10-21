@@ -44,9 +44,9 @@
     let out = '';
 
     // mejillas
-    const cheekCol = mood === 'sick' ? '#9bd36a' : c.cheek;
-    out += `<ellipse cx="${f(eyes[0] - r * 0.12)}" cy="${f(ey + r * 0.3)}" rx="${f(r * 0.13)}" ry="${f(r * 0.08)}" fill="${cheekCol}" opacity=".65"/>`;
-    out += `<ellipse cx="${f(eyes[1] + r * 0.14)}" cy="${f(ey + r * 0.3)}" rx="${f(r * 0.13)}" ry="${f(r * 0.08)}" fill="${cheekCol}" opacity=".65"/>`;
+    const ck = mood === 'sick' ? 'fill="#9bd36a" opacity=".6"' : 'fill="url(#__ID__k)"';
+    out += `<ellipse class="cheek" cx="${f(eyes[0] - r * 0.12)}" cy="${f(ey + r * 0.3)}" rx="${f(r * 0.17)}" ry="${f(r * 0.11)}" ${ck}/>`;
+    out += `<ellipse class="cheek" cx="${f(eyes[1] + r * 0.14)}" cy="${f(ey + r * 0.3)}" rx="${f(r * 0.17)}" ry="${f(r * 0.11)}" ${ck}/>`;
 
     // ojos
     let eyeSvg = '';
@@ -65,8 +65,9 @@
         const sad = mood === 'sad';
         const k = sad ? 0.85 : 1;
         eyeSvg += `<g class="eye"><ellipse cx="${f(ex)}" cy="${f(ey)}" rx="${f(rx * k)}" ry="${f(ry * k)}" fill="${INK}"/>` +
-          `<circle cx="${f(ex + rx * 0.35)}" cy="${f(ey - ry * 0.42)}" r="${f(rx * 0.42)}" fill="#fff"/>` +
-          `<circle cx="${f(ex - rx * 0.35)}" cy="${f(ey + ry * 0.4)}" r="${f(rx * 0.18)}" fill="#fff" opacity=".8"/></g>`;
+          `<ellipse cx="${f(ex)}" cy="${f(ey + ry * 0.45)}" rx="${f(rx * 0.62 * k)}" ry="${f(ry * 0.32 * k)}" fill="#5b3fa8" opacity=".55"/>` +
+          `<g class="look"><circle cx="${f(ex + rx * 0.35)}" cy="${f(ey - ry * 0.42)}" r="${f(rx * 0.42)}" fill="#fff"/>` +
+          `<circle cx="${f(ex - rx * 0.35)}" cy="${f(ey + ry * 0.4)}" r="${f(rx * 0.18)}" fill="#fff" opacity=".8"/></g></g>`;
         if (sad) {
           const inner = i === 0 ? 1 : -1; // ceja: extremo interno más alto
           const x1 = ex - rx * 1.3, x2 = ex + rx * 1.3;
@@ -202,7 +203,7 @@
       for (let i = -1; i <= 1; i++) s += `<path d="M${f(bx + brx * 0.28 - brx * 0.38)} ${f(by + bry * 0.16 + i * bry * 0.24)} Q${f(bx + brx * 0.28)} ${f(by + bry * 0.16 + i * bry * 0.24 + 4)} ${f(bx + brx * 0.28 + brx * 0.38)} ${f(by + bry * 0.16 + i * bry * 0.24)}" stroke="${shade(c.belly, 0.85)}" stroke-width="1.6" fill="none"/>`;
       // bracito
       const ax = bx + brx * 0.78, ay = by - bry * 0.02;
-      s += `<path class="arm" d="M${f(ax - 5)} ${f(ay - 6)} Q${f(ax + 12)} ${f(ay - 2)} ${f(ax + 10)} ${f(ay + 12)} Q${f(ax + 4)} ${f(ay + 15)} ${f(ax + 1)} ${f(ay + 8)} Q${f(ax - 2)} ${f(ay + 2)} ${f(ax - 6)} ${f(ay + 2)} Z" fill="${c.body}" stroke="${c.dark}" stroke-width="1.3" stroke-linejoin="round"/>`;
+      s += `<path class="arm" style="transform-origin:${f(ax - 3)}px ${f(ay - 3)}px" d=""M${f(ax - 5)} ${f(ay - 6)} Q${f(ax + 12)} ${f(ay - 2)} ${f(ax + 10)} ${f(ay + 12)} Q${f(ax + 4)} ${f(ay + 15)} ${f(ax + 1)} ${f(ay + 8)} Q${f(ax - 2)} ${f(ay + 2)} ${f(ax - 6)} ${f(ay + 2)} Z" fill="${c.body}" stroke="${c.dark}" stroke-width="1.3" stroke-linejoin="round"/>`;
     }
     s += foot(G.feet[1][0], G.feet[1][1], G.feet[1][2], G.feet[1][3], c.dark, 'foot foot-a');
     // cabeza
@@ -257,7 +258,7 @@
     // cabeza
     let head = '';
     const cs = G.crest;
-    head += `<g class="crest">`;
+    head += `<g class="crest" style="transform-origin:${f(hx)}px ${f(hy - hr * 0.8)}px">`;
     [[-0.25, -26, 0], [0.05, -32, 6], [0.32, -24, 12]].forEach(([ox, len, rot]) => {
       const x0 = hx + hr * ox, y0 = hy - hr * 0.85;
       head += `<path d="M${f(x0 - 4)} ${f(y0 + 4)} Q${f(x0 - 12 * cs + rot * 0.2)} ${f(y0 + len * cs * 0.6)} ${f(x0 - 10 * cs + rot)} ${f(y0 + len * cs)} Q${f(x0 + 2 + rot * 0.3)} ${f(y0 + len * cs * 0.5)} ${f(x0 + 5)} ${f(y0 + 4)} Z" fill="${c.crest}"/>`;
@@ -500,13 +501,31 @@
 
   /* ---------------- API ---------------- */
   // opts: { species, stage, variant, mood, dir, accessory, walking, flying }
+  // Volumen: cada parte del cuerpo se pinta con un degradé (más clara arriba a la izquierda, donde "da la luz",
+  // y un poco más oscura en el borde), las mejillas se esfuman y la cabeza tiene un brillo. Mismo dibujo, más lindo.
+  let gid = 0;
+  function volumeDefs(id, c) {
+    const rg = (n, a, b, d) => `<radialGradient id="${id}${n}" cx="36%" cy="30%" r="78%"><stop offset="0" stop-color="${a}"/><stop offset=".58" stop-color="${b}"/><stop offset="1" stop-color="${d}"/></radialGradient>`;
+    let s = '<defs>' + rg('b', shade(c.body, 1.16), c.body, shade(c.body, 0.84));
+    if (c.belly) s += rg('l', shade(c.belly, 1.05), c.belly, shade(c.belly, 0.9));
+    if (c.shell) s += rg('s', shade(c.shell, 1.18), c.shell, shade(c.shell, 0.82));
+    s += `<radialGradient id="${id}k"><stop offset="0" stop-color="${c.cheek}" stop-opacity=".9"/><stop offset="1" stop-color="${c.cheek}" stop-opacity="0"/></radialGradient></defs>`;
+    return s;
+  }
   function petSVG(o) {
     const c = palette(o.species, o.stage, o.variant);
     const fn = { dragon, bird, lizard, turtle }[o.species];
     const r = fn(o.stage, c, o.mood);
+    const id = 'pv' + (++gid).toString(36);
+    const h0 = r.head;
+    const gloss = `<ellipse class="gloss" cx="${f(h0.x - h0.r * 0.36)}" cy="${f(h0.y - h0.r * 0.5)}" rx="${f(h0.r * 0.3)}" ry="${f(h0.r * 0.15)}" fill="#fff" opacity=".32" transform="rotate(-32 ${f(h0.x - h0.r * 0.36)} ${f(h0.y - h0.r * 0.5)})"/>`;
     const acc = o.accessory ? accessory(o.accessory, r.head) : '';
     const special = o.act === 'special' ? specialSVG(o.species, o.stage, r.head) : '';
-    const body = r.svg.replace(HEADSLOT, acc + special);
+    const body = r.svg.replace(HEADSLOT, gloss + acc + special)
+      .split(`fill="${c.body}"`).join(`fill="url(#${id}b)"`)
+      .split(`fill="${c.belly}"`).join(`fill="url(#${id}l)"`)
+      .split(c.shell ? `fill="${c.shell}"` : '\u0000').join(`fill="url(#${id}s)"`)
+      .split('__ID__').join(id);
     const flip = o.dir === -1 ? ' transform="translate(200 0) scale(-1 1)"' : '';
     const cls = ['pet', 'sp-' + o.species, 'st-' + o.stage, 'mood-' + o.mood];
     if (o.walking) cls.push('walking');
@@ -516,7 +535,7 @@
     const fh = flipHead(r.head, o.dir);
     // posición de la cabeza (para ubicar cosas cerca: el ícono de pedidos, etc.)
     const hd = ` data-hx="${f(fh.x)}" data-ht="${f(fh.top)}" data-hr="${f(fh.r)}" data-dir="${o.dir === -1 ? -1 : 1}"`;
-    return `<svg class="${cls.join(' ')}" viewBox="-20 0 240 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"${hd}>` +
+    return `<svg class="${cls.join(' ')}" viewBox="-20 0 240 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"${hd}>` + volumeDefs(id, c) +
       `<ellipse class="shadow" cx="100" cy="191" rx="${shadowW}" ry="6" fill="#000" opacity=".16"/>` +
       `<g class="flipper"${flip}><g class="bob">${body}</g></g>` +
       `<g class="pfx">${overlays(o.mood, flipHead(r.head, o.dir), o.variant, o.dir, o.act, o.species)}</g></svg>`;

@@ -48,14 +48,24 @@
         set('.wobble', r ? `rotate(${r.toFixed(1)}deg)` : '');
         return ph > 0.66 ? MS.egg : Math.min(1500, (0.7 - ph) * per * 1000); // quieto entre bamboleos: no se dibuja
       }
+      let hopping = false;
+      const baby = cl.contains('st-baby'), adult = cl.contains('st-adult'), happy = cl.contains('mood-happy');
       const walk = cl.contains('walking'), fly = cl.contains('flying'), sleep = cl.contains('mood-sleep'), dead = cl.contains('mood-dead');
       const at = (performance.now() - (view ? view.actT0 : 0)) / 1000; // tiempo desde que empezó el gesto
       const gesture = cl.contains('act-special') || cl.contains('act-stretch') || cl.contains('act-hop') || cl.contains('act-scratch') || cl.contains('mood-yawn') || cl.contains('act-look');
       if (cl.contains('act-stretch')) { const k = Math.sin(Math.PI * Math.min(1, at / 1.5)); set('.bob', `scale(${(1 + 0.13 * k).toFixed(3)}, ${(1 - 0.12 * k).toFixed(3)})`); }
       else if (cl.contains('act-hop')) set('.bob', `translateY(${(-24 * Math.abs(Math.sin(Math.PI * at / 0.5))).toFixed(1)}px)`);
-      else if (walk) set('.bob', `translateY(${(-6 * Math.abs(Math.sin(Math.PI * t / 0.42))).toFixed(1)}px)`);
+      // caminando: saltitos y un balanceo de lado a lado al compás de los pasos
+      else if (walk) set('.bob', `translateY(${(-6 * Math.abs(Math.sin(Math.PI * t / 0.42))).toFixed(1)}px) rotate(${(2.6 * Math.sin(Math.PI * t / 0.42)).toFixed(1)}deg)`);
       else if (fly || dead) set('.bob', `translateY(${(-7 * wave(t, dead ? 3 : 1.2)).toFixed(1)}px)`);
-      else { const k = wave(t, sleep ? 3.8 : 2.6); set('.bob', `scale(${(1 + 0.025 * k).toFixed(3)}, ${(1 - 0.028 * k).toFixed(3)})`); }
+      else {
+        // quieta: respira (dormida, más hondo y lento). Los bebés además pegan un saltito cada tanto.
+        const k = wave(t, sleep ? 3.8 : 2.6);
+        let hop = 0;
+        if (baby && !sleep) { const ph = (t % 3.4) / 3.4; if (ph < 0.14) hop = -7 * Math.sin(Math.PI * ph / 0.14); hopping = ph < 0.16 || ph > 0.97; }
+        const sx = 1 + (sleep ? 0.035 : 0.025) * k, sy = 1 - (sleep ? 0.04 : 0.028) * k;
+        set('.bob', `translateY(${(hop - (sleep ? 1.5 * k : 0)).toFixed(1)}px) scale(${sx.toFixed(3)}, ${sy.toFixed(3)})`);
+      }
       if (cl.contains('act-scratch')) {
         const a = Math.sin(TAU * at / 0.18);
         set('.foot-a', `translate(${(6 + a).toFixed(1)}px, ${(-17 + 2 * a).toFixed(1)}px) rotate(${(-22 + 4 * a).toFixed(0)}deg)`);
@@ -67,13 +77,25 @@
       } else set('.foot', '');
       if (sleep || dead) set('.wing', '');
       else set('.wing', fly ? `rotate(${(12 - 44 * wave(t, 0.3)).toFixed(1)}deg)` : `rotate(${(-9 * wave(t, walk ? 1 : 2.6)).toFixed(1)}deg)`);
-      set('.tail', `rotate(${(-7 * wave(t, sleep ? 4 : 2.2)).toFixed(1)}deg)`);
+      // la cola: más movida en los bebés y cuando está contenta
+      const tailAmp = (baby ? 12 : adult ? 7 : 9) * (happy ? 1.4 : 1) * (sleep ? 0.5 : 1);
+      set('.tail', `rotate(${(-tailAmp * wave(t, sleep ? 4 : happy ? 1.1 : 2.2)).toFixed(1)}deg)`);
+      // mira para los costados cada tanto (los ojos se corren un poquito)
+      if (!sleep && !dead) {
+        const seg = Math.floor(t / 2.7), rnd = (n) => { const x = Math.sin(seg * 12.9898 + n * 78.233) * 43758.5453; return x - Math.floor(x); };
+        const lx = rnd(1) < 0.45 ? 0 : rnd(2) < 0.5 ? -1.8 : 1.8, ly = rnd(3) < 0.6 ? 0 : rnd(4) < 0.5 ? -0.8 : 0.8;
+        set('.eye', lx || ly ? `translate(${lx}px, ${ly}px)` : '');
+      } else set('.eye', '');
+      set('.crest', `rotate(${(-6 * wave(t, happy ? 0.9 : 2.4)).toFixed(1)}deg)`);
+      set('.frill', `scale(${(1 + 0.05 * wave(t, 3)).toFixed(3)})`);
+      set('.arm', happy ? `rotate(${(-18 * wave(t, 0.7)).toFixed(1)}deg)` : `rotate(${(-4 * wave(t, 3.1)).toFixed(1)}deg)`);
       const bp = t % BLINK;
       set('.eyes.blink', bp > BLINK_AT && bp < BLINK_END ? 'scaleY(0.1)' : '');
       if (cl.contains('act-scratch')) set('.head', `rotate(${(9 * Math.sin(Math.PI * Math.min(1, at / 1.5))).toFixed(1)}deg)`);
       else if (cl.contains('mood-yawn')) set('.head', `rotate(${(-7 * Math.sin(Math.PI * Math.min(1, at / 1.6))).toFixed(1)}deg)`);
       else if (cl.contains('mood-happy')) set('.head', `rotate(${(-5 * Math.sin(TAU * t / 1.6)).toFixed(1)}deg)`);
       else if (cl.contains('mood-eat')) set('.head', `rotate(${(6 * wave(t, 0.32)).toFixed(1)}deg)`);
+      else if (!sleep && !dead) set('.head', `rotate(${(2.5 * Math.sin(TAU * t / 5.3)).toFixed(1)}deg)`); // la cabeza se inclina apenas
       else set('.head', '');
       const on = Math.floor(t / 0.16) % 2 === 0;
       Q('.chomp .open').forEach((e) => fade(e, on ? '1' : '0'));
@@ -113,7 +135,7 @@
       set('.halo', `translateY(${(-7 * wave(t, 3)).toFixed(1)}px)`);
       set('.tear', `translateY(${(14 * ((t % 2) / 2)).toFixed(1)}px)`);
       Q('.twinkle').forEach((e, i) => { const k = wave(t + i * 0.6, 1.8); e.style.transform = `scale(${(0.4 + 0.7 * k).toFixed(2)})`; fade(e, (0.3 + 0.7 * k).toFixed(2)); });
-      let next = sleep || dead ? MS.sleep : walk || fly || gesture || cl.contains('mood-eat') ? MS.active : MS.idle;
+      let next = sleep || dead ? MS.sleep : walk || fly || gesture || hopping || cl.contains('mood-eat') ? MS.active : MS.idle;
       // que el parpadeo no se pierda entre dos cuadros: un cuadro justo al cerrar los ojos y otro al abrirlos
       if (!sleep && !dead && Q('.eyes.blink').length) {
         if (bp > BLINK_AT && bp < BLINK_END) next = Math.min(next, (BLINK_END - bp) * 1000 + 15);
