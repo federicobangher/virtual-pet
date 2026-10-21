@@ -13,6 +13,11 @@
   const TAG = 26;   // espacio abajo para el nombre
   const MINW = 290; // ancho mínimo de la ventana compacta (para que entre el globito)
   const CARD_W = 360;
+  // Alto máximo del panel. Antes ocupaba casi toda la pantalla (alto del monitor − 16 px): en Windows, con
+  // escalas distintas o la barra de tareas arriba, la parte de arriba (con la X y la flecha de volver)
+  // podía quedar fuera de la pantalla y no había forma de cerrarlo.
+  const CARD_MAXH = 600;
+  const cardMaxH = () => Math.max(260, Math.min(CARD_MAXH, wa.height - 40));
 
   const host = { kind: 'desktop' };
   let E = {}, view;
@@ -81,7 +86,7 @@
   /* ---------- ventana: tamaño y posición ---------- */
   function cardSize() {
     const r = E.card.getBoundingClientRect();
-    return { w: CARD_W, h: Math.min(r.height || 460, wa.height - 16) };
+    return { w: CARD_W, h: Math.min(r.height || 460, cardMaxH()) };
   }
   function placeCardAuto() {
     const cs = cardSize();
@@ -98,7 +103,7 @@
     const cs = cardSize();
     return {
       x: Math.max(wa.x + 8, Math.min(wa.x + wa.width - cs.w - 8, x)),
-      y: Math.max(wa.y + 8, Math.min(wa.y + wa.height - cs.h - 8, y)),
+      y: Math.max(wa.y + 12, Math.min(wa.y + wa.height - cs.h - 12, y)),
     };
   }
   // Calcula el rectángulo de la ventana y ubica la mascota y el panel adentro.
@@ -125,6 +130,22 @@
     sl(E.pet, 'left', pos.x - b.x); sl(E.pet, 'top', pos.y - b.y);
     if (cardOpen && cardPos) { sl(E.card, 'left', cardPos.x - b.x); sl(E.card, 'top', cardPos.y - b.y); }
   }
+  function applyCardMax() { const v = cardMaxH() + 'px'; if (E.card.style.maxHeight !== v) E.card.style.maxHeight = v; }
+  // Windows a veces no deja la ventana exactamente donde se pidió (monitores con distinta escala, ventana más
+  // alta que la pantalla). Electron avisa dónde quedó de verdad y acá se reacomoda todo adentro, y si el panel
+  // igual quedara cortado, se lo trae a la parte visible del monitor.
+  let fixTries = 0;
+  function onRealBounds(rb) {
+    if (!rb) return;
+    bounds = { x: rb.x, y: rb.y, width: rb.width, height: rb.height };
+    const sl = (el, k, v) => { v = Math.round(v) + 'px'; if (el.style[k] !== v) el.style[k] = v; };
+    sl(E.pet, 'left', pos.x - rb.x); sl(E.pet, 'top', pos.y - rb.y);
+    if (!cardOpen || !cardPos) return;
+    sl(E.card, 'left', cardPos.x - rb.x); sl(E.card, 'top', cardPos.y - rb.y);
+    const cs = cardSize();
+    const off = cardPos.y < rb.y || cardPos.y + cs.h > rb.y + rb.height || cardPos.y < wa.y;
+    if (off && fixTries++ < 3) { cardPos = clampCard(cardPos.x, Math.max(cardPos.y, rb.y)); layout(); }
+  }
 
   host.init = function () {
     document.body.classList.add('mode-desktop');
@@ -134,12 +155,13 @@
       <div class="dcard" hidden role="dialog" aria-label="Virtual Pet">
         <div class="dcard-head"><span class="brand">Virtual Pet</span><button type="button" class="dclose" aria-label="Cerrar panel">${UI.ic('close')}</button></div>
         <div class="dcard-body"><div class="dpanel"></div><div class="dsheet" hidden><div class="dsheet-head"><button type="button" class="dback" aria-label="Volver">${UI.ic('back')}</button><h3></h3></div><div class="dsheet-body"></div></div><div class="dmodal" hidden></div></div>
+        <div class="dcard-foot"><button type="button" class="btn dclose2">${UI.ic('close')} Cerrar el panel</button></div>
       </div>`;
     E = {
       pet: app.querySelector('.dpet'), svg: app.querySelector('.dsvg'), hit: app.querySelector('.hit'), bubble: app.querySelector('.bubble'), tag: app.querySelector('.dtag'),
       card: app.querySelector('.dcard'), panel: app.querySelector('.dpanel'), sheet: app.querySelector('.dsheet'),
       sheetTitle: app.querySelector('.dsheet h3'), sheetBody: app.querySelector('.dsheet-body'), modal: app.querySelector('.dmodal'),
-      head: app.querySelector('.dcard-head'), close: app.querySelector('.dclose'),
+      head: app.querySelector('.dcard-head'), close: app.querySelector('.dclose'), foot: app.querySelector('.dcard-foot'),
     };
     view = new UI.PetView(E.svg);
     startAnim();
@@ -153,7 +175,7 @@
 
     setAreas(D.screenInfo());
     wa = primary;
-    E.card.style.maxHeight = (wa.height - 16) + 'px';
+    applyCardMax();
     measure();
     if (pref.x != null && pref.y != null) { const c = clampPt(pref.x, pref.y); pos.x = c.x; pos.y = c.y; } // (si ese monitor ya no está, va al más cercano)
     else { pos.x = primary.x + primary.width - size.w - 180; pos.y = floorOf(primary); }
@@ -189,6 +211,13 @@
     E.hit.addEventListener('pointercancel', endDrag);
 
     E.close.addEventListener('click', () => closeCard());
+    E.card.querySelector('.dclose2').addEventListener('click', () => closeCard());
+    // Escape: vuelve de una hoja al panel, o cierra el panel
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !cardOpen) return;
+      if (!E.sheet.hidden) UI.closeSheet(); else closeCard();
+    });
+    if (D.onBounds) D.onBounds(onRealBounds);
     E.sheet.querySelector('.dback').addEventListener('click', () => host.sheetClose());
 
     // mover el panel desde su encabezado
@@ -225,13 +254,15 @@
       setAreas(w.areas ? w : { workArea: w, areas: [w] });
       const c = clampPt(pos.x, pos.y); pos.x = c.x; pos.y = c.y; wa = areaOfPet(pos.x, pos.y);
       target = null;
-      E.card.style.maxHeight = (wa.height - 16) + 'px';
+      applyCardMax();
       if (cardOpen && cardPos) cardPos = clampCard(cardPos.x, cardPos.y);
       layout();
     });
     D.onPoopClean((id) => { const r = C.act.clean(id); if (r.ok) snd.play('good'); syncPoops(true); });
-    D.onCommand((cmd) => {
+    const onCmd = (cmd) => {
       if (cmd === 'panel') { show(); openCard(); }
+      else if (cmd === 'closePanel') { if (!E.sheet.hidden) host.sheetClose(); closeCard(); }
+      else if (cmd === 'toggle') { show(); if (cardOpen && E.modal.hidden) closeCard(); else openCard(); }
       else if (cmd === 'save') C.save();
       else if (cmd === 'hide') hideAll(true);
       else if (cmd === 'show') hideAll(false);
@@ -247,7 +278,9 @@
         if (D.getCursor) D.getCursor().then((c) => go(c ? areaAt(c.x, c.y) : primary)).catch(() => go(primary)); else go(primary);
       } else if (cmd === 'onTop') { C.act.setting('onTop', !C.state.settings.onTop); D.setOnTop(C.state.settings.onTop); syncTray(); }
       else if (cmd === 'follow' || cmd === 'sound' || cmd === 'wander' || cmd === 'notify') { C.act.setting(cmd, !C.state.settings[cmd]); syncTray(); wake(); }
-    });
+    };
+    D.onCommand(onCmd);
+    host.debugCmd = onCmd; // (para las pruebas automáticas)
     D.getAutostart().then((v) => { C.state.settings.autostart = !!v; syncTray(); }).catch(() => {});
     D.setOnTop(C.state.settings.onTop !== false);
     setTimeout(syncTray, 300);
@@ -293,8 +326,9 @@
   function relayoutCard() { requestAnimationFrame(() => { if (!cardOpen) return; placeCardAuto(); layout(); }); }
   function openCard() {
     if (cardOpen) { relayoutCard(); return; }
-    cardOpen = true;
+    cardOpen = true; fixTries = 0;
     E.card.hidden = false;
+    applyCardMax();
     placeCardAuto(); layout(); relayoutCard();
     D.focus();
   }
@@ -358,13 +392,13 @@
     openCard();
     E.modal.replaceChildren(node);
     E.modal.hidden = false; E.panel.hidden = true;
-    E.close.hidden = true;
+    E.close.hidden = true; E.foot.hidden = true;
     relayoutCard();
     const inp = node.querySelector('input');
     if (inp) setTimeout(() => inp.focus(), 80);
   };
   host.modalClose = function () {
-    E.modal.hidden = true; E.modal.replaceChildren(); E.panel.hidden = false; E.close.hidden = false;
+    E.modal.hidden = true; E.modal.replaceChildren(); E.panel.hidden = false; E.close.hidden = false; E.foot.hidden = false;
     measure();
     relayoutCard();
   };
@@ -579,6 +613,8 @@
     return moved;
   }
 
+  // para las pruebas automáticas: poner la mascota en un punto de la pantalla
+  host.debugPlace = (x, y) => { const c = clampPt(x, y); pos.x = c.x; pos.y = c.y; wa = areaOfPet(pos.x, pos.y); mode = 'free'; target = null; layout(); };
   host.debug = () => ({ idleUntil: Math.round(idleUntil - performance.now()), pos: { x: Math.round(pos.x), y: Math.round(pos.y) }, target, mode, running, card: cardOpen, temp: view.temp, bounds, wa, fy: Math.round(floorY()), areas });
   /* ---------- animación "a cuadros" (js/anim.js) ----------
      En vez de dejar que Chromium anime a 60 cuadros por segundo, la mascota se anima con un reloj propio:

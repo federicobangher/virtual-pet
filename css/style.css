@@ -318,11 +318,14 @@ html.desk, body.mode-desktop { background: transparent !important; overflow: hid
 .dpet.dragging { cursor: grabbing; }
 .dtag { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); font-weight: 800; font-size: .78rem; background: rgba(255, 255, 255, .92); border: 2px solid var(--ink); border-radius: 10px; padding: 1px 8px; white-space: nowrap; opacity: 0; transition: opacity .2s; pointer-events: none; }
 .dpet:hover .dtag { opacity: 1; }
-.dcard { position: absolute; z-index: 20; width: 360px; max-height: 640px; display: flex; flex-direction: column; background: var(--paper); border: 3px solid var(--ink); border-radius: 22px; box-shadow: 0 6px 0 var(--ink); }
+.dcard { position: absolute; z-index: 20; width: 360px; max-height: 600px; display: flex; flex-direction: column; background: var(--paper); border: 3px solid var(--ink); border-radius: 22px; box-shadow: 0 6px 0 var(--ink); }
 .dcard-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 0 14px; cursor: grab; }
 .dcard-head .brand { font-family: var(--f-display); font-size: .95rem; color: var(--ink-soft); flex: 1; }
 .dcard-head button { width: 32px; height: 32px; display: grid; place-items: center; border: 2px solid var(--ink); border-radius: 10px; background: #fff; box-shadow: 0 2px 0 var(--ink); }
-.dcard-body { overflow-y: auto; padding: 10px 14px 14px; display: grid; gap: 12px; }
+.dcard-body { overflow-y: auto; padding: 10px 14px 14px; display: grid; gap: 12px; flex: 1 1 auto; min-height: 0; }
+.dcard-head, .dcard-foot { flex: none; }
+.dcard-foot { padding: 8px 14px 12px; border-top: 2px solid var(--line); }
+.dcard-foot .btn { width: 100%; }
 .dcard .dpanel { display: grid; gap: 12px; }
 .dcard .meters { grid-template-columns: 1fr; gap: 6px; }
 .dcard .meter { grid-template-columns: 26px 78px 1fr; grid-template-rows: auto; }
