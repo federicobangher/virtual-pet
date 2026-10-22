@@ -467,16 +467,21 @@
     return '';
   }
 
-  // Dónde van las estrellitas de la forma brillante: en el aire alrededor de la mascota, sin tocarla nunca
-  // (calculado con tools/estrellas.py sobre la silueta de todos los cuadros de la animación, con accesorios;
-  // antes estaban en lugares fijos y caían encima del cuerpo, las alas o la cola)
-  const SPARKLES = {
-    dragon: { baby: [[46, 96], [160, 88], [98, 20]], young: [[6, 98], [198, 92], [108, 18]], adult: [[16, 82], [208, 72], [78, 28]] },
-    bird: { baby: [[52, 104], [148, 104], [104, 54]], young: [[50, 104], [160, 96], [64, 92]], adult: [[28, 96], [170, 78], [82, 22]] },
-    lizard: { baby: [[38, 120], [170, 110], [134, 62]], young: [[16, 112], [184, 112], [104, 80]], adult: [[4, 102], [194, 102], [138, 40]] },
-    turtle: { baby: [[62, 114], [174, 118], [126, 74]], young: [[42, 120], [184, 114], [122, 84]], adult: [[28, 112], [202, 110], [140, 60]] },
+  // Estrellitas de la forma brillante: son parte del dibujo, como pintitas doradas en la piel. Una va en la cabeza
+  // (dentro del grupo .head: se inclina con ella) y las otras en el lomo (dentro de .bob: se mueven con el cuerpo).
+  // Los lugares los calcula tools/estrellas.py para que queden siempre sobre la piel en todas las poses.
+  const SHINY_SPOTS = {
+    dragon: { baby: [['h', 108, 106], ['t', 72, 158], ['t', 82, 154]], young: [['h', 128, 86], ['t', 68, 140], ['t', 88, 132]], adult: [['h', 138, 62], ['t', 64, 132], ['t', 114, 120]] },
+    bird: { baby: [['t', 104, 124], ['t', 122, 124]], young: [['h', 124, 84], ['t', 82, 126], ['t', 88, 128]], adult: [['h', 132, 62], ['t', 78, 112], ['t', 98, 112]] },
+    lizard: { baby: [['h', 134, 116]], young: [['h', 146, 108], ['t', 54, 158], ['t', 90, 144]], adult: [['h', 154, 94], ['t', 46, 148], ['t', 124, 146]] },
+    turtle: { baby: [['h', 142, 132]], young: [['h', 154, 124], ['t', 114, 144]], adult: [['h', 164, 110], ['t', 58, 146], ['t', 122, 146]] },
   };
-  function overlays(mood, head, variant, dir, act, species, stage) {
+
+  function shinyStar(x, y, k, n) {
+    const p = (dx, dy) => `${f(x + dx * k)} ${f(y + dy * k)}`;
+    return `<path class="twinkle t${n}" d="M${p(0, -7)} L${p(1.8, -1.8)} L${p(7, 0)} L${p(1.8, 1.8)} L${p(0, 7)} L${p(-1.8, 1.8)} L${p(-7, 0)} L${p(-1.8, -1.8)} Z" fill="#fffbe0" stroke="#ffc928" stroke-width="1.1" stroke-linejoin="round"/>`;
+  }
+  function overlays(mood, head, variant, dir, act, species) {
     dir = dir === -1 ? -1 : 1;
     let s = '';
     if (act === 'special' && species === 'bird') {
@@ -503,12 +508,6 @@
     if (mood === 'dead') {
       s += `<ellipse class="halo" cx="${f(head.x)}" cy="${f(head.top - 10)}" rx="${f(head.r * 0.65)}" ry="${f(head.r * 0.18)}" fill="none" stroke="#ffd23f" stroke-width="5"/>`;
     }
-    if (variant === 'shiny' && mood !== 'dead') {
-      const st = (x, y, k, cls) => `<path class="${cls}" d="M${x} ${y - 7 * k} L${x + 2 * k} ${y - 2 * k} L${x + 7 * k} ${y} L${x + 2 * k} ${y + 2 * k} L${x} ${y + 7 * k} L${x - 2 * k} ${y + 2 * k} L${x - 7 * k} ${y} L${x - 2 * k} ${y - 2 * k} Z" fill="#ffd23f" style="transform-origin:${x}px ${y}px"/>`;
-      const pts = (SPARKLES[species] || SPARKLES.dragon)[stage] || SPARKLES.dragon.adult;
-      const k = [1.2, 1, 0.85];
-      pts.forEach(([x, y], i) => { s += st(dir === -1 ? 200 - x : x, y, k[i], 'twinkle t' + (i + 1)); }); // del otro lado si mira para el otro lado
-    }
     return s;
   }
 
@@ -534,7 +533,12 @@
     const gloss = `<ellipse class="gloss" cx="${f(h0.x - h0.r * 0.36)}" cy="${f(h0.y - h0.r * 0.5)}" rx="${f(h0.r * 0.3)}" ry="${f(h0.r * 0.15)}" fill="#fff" opacity=".32" transform="rotate(-32 ${f(h0.x - h0.r * 0.36)} ${f(h0.y - h0.r * 0.5)})"/>`;
     const acc = o.accessory ? accessory(o.accessory, r.head) : '';
     const special = o.act === 'special' ? specialSVG(o.species, o.stage, r.head) : '';
-    const body = r.svg.replace(HEADSLOT, gloss + acc + special)
+    let headStars = '', bodyStars = '';
+    if (o.variant === 'shiny' && o.mood !== 'dead') {
+      const spots = (SHINY_SPOTS[o.species] || {})[o.stage] || [];
+      spots.forEach(([w, x, y], i) => { const st = shinyStar(x, y, w === 'h' ? 0.62 : 0.72, i + 1); if (w === 'h') headStars += st; else bodyStars += st; });
+    }
+    const body = (r.svg + bodyStars).replace(HEADSLOT, gloss + headStars + acc + special)
       .split(`fill="${c.body}"`).join(`fill="url(#${id}b)"`)
       .split(`fill="${c.belly}"`).join(`fill="url(#${id}l)"`)
       .split(c.shell ? `fill="${c.shell}"` : '\u0000').join(`fill="url(#${id}s)"`)
@@ -551,7 +555,7 @@
     return `<svg class="${cls.join(' ')}" viewBox="-20 0 240 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"${hd}>` + volumeDefs(id, c) +
       `<ellipse class="shadow" cx="100" cy="191" rx="${shadowW}" ry="6" fill="#000" opacity=".16"/>` +
       `<g class="flipper"${flip}><g class="bob">${body}</g></g>` +
-      `<g class="pfx">${overlays(o.mood, flipHead(r.head, o.dir), o.variant, o.dir, o.act, o.species, o.stage)}</g></svg>`;
+      `<g class="pfx">${overlays(o.mood, flipHead(r.head, o.dir), o.variant, o.dir, o.act, o.species)}</g></svg>`;
   }
   function flipHead(h, dir) {
     if (dir !== -1) return h;

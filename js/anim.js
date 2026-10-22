@@ -134,7 +134,7 @@
       set('.dizzy', `rotate(${((t / 2.4) * 360 % 360).toFixed(0)}deg)`);
       set('.halo', `translateY(${(-7 * wave(t, 3)).toFixed(1)}px)`);
       set('.tear', `translateY(${(14 * ((t % 2) / 2)).toFixed(1)}px)`);
-      Q('.twinkle').forEach((e, i) => { const k = wave(t + i * 0.6, 1.8); e.style.transform = `scale(${(0.4 + 0.7 * k).toFixed(2)})`; fade(e, (0.3 + 0.7 * k).toFixed(2)); });
+      Q('.twinkle').forEach((e, i) => { const k = wave(t + i * 0.6, 1.8); e.style.transform = `scale(${(0.78 + 0.27 * k).toFixed(2)})`; fade(e, (0.7 + 0.3 * k).toFixed(2)); }); // brillan sin desaparecer: son pintitas de la piel
       let next = sleep || dead ? MS.sleep : walk || fly || gesture || hopping || cl.contains('mood-eat') ? MS.active : MS.idle;
       // que el parpadeo no se pierda entre dos cuadros: un cuadro justo al cerrar los ojos y otro al abrirlos
       if (!sleep && !dead && Q('.eyes.blink').length) {
