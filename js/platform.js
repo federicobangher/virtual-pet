@@ -136,5 +136,34 @@
     try { P.Haptics.impact({ style: kind2 === 'heavy' ? 'HEAVY' : 'LIGHT' }); } catch (e) { /* sin vibración */ }
   };
 
+  /* ---------- instalar el juego (página web en el celular o la tablet) ----------
+     Chrome sólo muestra solo su cartelito de "Instalar" de vez en cuando (si lo cerraste, tarda meses en volver),
+     así que el juego ofrece su propio botón: guarda el aviso del navegador y lo muestra cuando tocás "Instalar".
+     En iPhone/iPad no existe ese aviso: se explica cómo hacerlo desde Safari. */
+  const inst = { ev: null, done: false, subs: [] };
+  const standalone = () => { try { return matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches || navigator.standalone === true; } catch (e) { return false; } };
+  const ua = navigator.userAgent || '';
+  const ios = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  if (kind === 'web') {
+    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); inst.ev = e; inst.subs.forEach((f) => { try { f(); } catch (x) { /* nada */ } }); });
+    window.addEventListener('appinstalled', () => { inst.ev = null; inst.done = true; inst.subs.forEach((f) => { try { f(); } catch (x) { /* nada */ } }); });
+  }
+  plat.install = {
+    // 'ready': se puede instalar con un toque · 'ios': hay que hacerlo desde Safari · 'manual': desde el menú del navegador
+    // 'installed': ya está abierta como app · null: no corresponde (Windows o la app de Android)
+    state() {
+      if (kind !== 'web') return null;
+      if (standalone() || inst.done) return 'installed';
+      if (inst.ev) return 'ready';
+      return ios ? 'ios' : 'manual';
+    },
+    async prompt() {
+      if (!inst.ev) return false;
+      const e = inst.ev; inst.ev = null;
+      try { await e.prompt(); const c = await e.userChoice; const ok = !!(c && c.outcome === 'accepted'); if (ok) inst.done = true; return ok; } catch (x) { return false; }
+    },
+    onChange(fn) { inst.subs.push(fn); },
+  };
+
   N.platform = plat;
 })();

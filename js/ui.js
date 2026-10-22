@@ -580,6 +580,21 @@
   }
 
   const scroller = (n) => n.closest('.sheet-body') || n.closest('.dcard-body');
+  // "Instalar el juego" (sólo en la página web): botón si el navegador lo permite, si no, cómo hacerlo a mano
+  function installHTML() {
+    const st = plat.install && plat.install.state();
+    if (!st || st === 'installed') return '';
+    const body = st === 'ready' ? `<p class="note">Queda como una app más: con su ícono, a pantalla completa y funciona sin internet.</p><button type="button" class="btn primary" data-install>${ic('download')} Instalar Virtual Pet</button>`
+      : st === 'ios' ? '<p class="note">En Safari tocá el botón <b>Compartir</b> (el cuadrado con la flecha para arriba) y elegí <b>Agregar a inicio</b>.</p>'
+      : '<p class="note">Abrí el menú del navegador (<b>⋮</b> arriba a la derecha) y elegí <b>Instalar app</b> o <b>Agregar a la pantalla principal</b>. Si dice <b>Abrir app</b>, ya está instalado.</p>';
+    return `<section class="install"><h4>${ic('download')} Instalar el juego</h4>${body}</section>`;
+  }
+  async function doInstall() {
+    if (!plat.install) return;
+    const ok = await plat.install.prompt();
+    if (ok) say('¡Listo! Ya está en tu pantalla de inicio', false, 3500);
+    refreshSheet();
+  }
   const SHEETS = {
     status(focus) {
       const node = h('<div class="status"></div>');
@@ -655,6 +670,7 @@
         const achList = C.ACHIEVEMENTS.filter((a) => S.achievements[a.id] || !(desk && a.roomOnly));
         const nAch = achList.filter((a) => S.achievements[a.id]).length, totAch = achList.length;
         setHTML(node, `
+          ${installHTML()}
           <section class="row more-top"><button type="button" class="btn" data-open="achievements">${ic('star')} Logros <span class="cnt">${nAch}/${totAch}</span></button><button type="button" class="btn" data-open="album">${ic('book')} Álbum <span class="cnt">${S.album.length}</span></button></section>
           ${p && !p.dead ? `<section><h4>${ic('pencil')} Nombre</h4><form class="rename"><input id="rename" maxlength="16" value="${esc(p.name)}" aria-label="Nombre de la mascota"><button class="btn" type="submit">Cambiar</button></form></section>` : ''}
           ${desk ? '' : `<section class="bg-sec"><h4>${ic('image')} Fondo del cuarto</h4>${bgGrid()}</section>`}
@@ -713,6 +729,7 @@
         if (e.target.closest('[data-reset-no]')) { box.querySelector('[data-reset]').hidden = false; box.querySelector('.confirm').hidden = true; }
         if (e.target.closest('[data-reset-yes]')) { snd.play('tap'); closeSheet(); C.act.resetAll(); }
         const op = e.target.closest('[data-open]'); if (op) { snd.play('tap'); openSheet(op.dataset.open); return; }
+        if (e.target.closest('[data-install]')) { snd.play('tap'); doInstall().then(render); }
         if (e.target.closest('[data-export]')) exportSave();
         if (e.target.closest('[data-err-copy]')) copyErrors();
         if (e.target.closest('[data-err-clear]')) { plat.clearErrors && plat.clearErrors(); render(); }
@@ -1162,6 +1179,18 @@
     let exitHintT = 0;
     plat.onBackExitHint = () => { const t = Date.now(); if (t - exitHintT > 3000) { exitHintT = t; say('Tocá "atrás" otra vez para salir', false, 2200); } };
     if (N.billing) N.billing.init();
+    // Si el navegador permite instalar el juego, ofrecerlo una vez cada 3 días (también está siempre en Más)
+    if (plat.install) plat.install.onChange(() => {
+      refreshSheet();
+      if (plat.install.state() !== 'ready') return;
+      let last = 0; try { last = +localStorage.getItem('vpet.ofrecerInstalar') || 0; } catch (e) { /* nada */ }
+      if (Date.now() - last < 3 * C.DAY) return;
+      setTimeout(() => {
+        if (plat.install.state() !== 'ready' || modalOpen || sheetName || !C.state.pet) return;
+        try { localStorage.setItem('vpet.ofrecerInstalar', String(Date.now())); } catch (e) { /* nada */ }
+        say('¿Instalás el juego? Queda con su ícono y anda sin internet', false, 9000, { label: 'Instalar', run: () => { snd.unlock(); doInstall(); } });
+      }, 25000);
+    });
     window.addEventListener('pagehide', () => C.save());
     window.addEventListener('beforeunload', () => C.save());
     // Modo de prueba: Ctrl+Shift+D acelera el tiempo x120
