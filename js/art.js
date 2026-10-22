@@ -203,7 +203,7 @@
       for (let i = -1; i <= 1; i++) s += `<path d="M${f(bx + brx * 0.28 - brx * 0.38)} ${f(by + bry * 0.16 + i * bry * 0.24)} Q${f(bx + brx * 0.28)} ${f(by + bry * 0.16 + i * bry * 0.24 + 4)} ${f(bx + brx * 0.28 + brx * 0.38)} ${f(by + bry * 0.16 + i * bry * 0.24)}" stroke="${shade(c.belly, 0.85)}" stroke-width="1.6" fill="none"/>`;
       // bracito
       const ax = bx + brx * 0.78, ay = by - bry * 0.02;
-      s += `<path class="arm" style="transform-origin:${f(ax - 3)}px ${f(ay - 3)}px" d=""M${f(ax - 5)} ${f(ay - 6)} Q${f(ax + 12)} ${f(ay - 2)} ${f(ax + 10)} ${f(ay + 12)} Q${f(ax + 4)} ${f(ay + 15)} ${f(ax + 1)} ${f(ay + 8)} Q${f(ax - 2)} ${f(ay + 2)} ${f(ax - 6)} ${f(ay + 2)} Z" fill="${c.body}" stroke="${c.dark}" stroke-width="1.3" stroke-linejoin="round"/>`;
+      s += `<path class="arm" style="transform-origin:${f(ax - 3)}px ${f(ay - 3)}px" d="M${f(ax - 5)} ${f(ay - 6)} Q${f(ax + 12)} ${f(ay - 2)} ${f(ax + 10)} ${f(ay + 12)} Q${f(ax + 4)} ${f(ay + 15)} ${f(ax + 1)} ${f(ay + 8)} Q${f(ax - 2)} ${f(ay + 2)} ${f(ax - 6)} ${f(ay + 2)} Z" fill="${c.body}" stroke="${c.dark}" stroke-width="1.3" stroke-linejoin="round"/>`;
     }
     s += foot(G.feet[1][0], G.feet[1][1], G.feet[1][2], G.feet[1][3], c.dark, 'foot foot-a');
     // cabeza

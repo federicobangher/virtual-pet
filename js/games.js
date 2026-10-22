@@ -12,6 +12,8 @@
   }
   // Escribe un número en pantalla sólo si cambió
   const show = (el) => { let last = null; return (v) => { if (v !== last) { last = v; el.textContent = v; } }; };
+  // Una imagen rota (SVG mal formado) hace fallar drawImage y congelaba el juego: sólo dibujar si cargó bien
+  const ready = (im) => im.complete && im.naturalWidth > 0;
   function imgFromSVG(svg) {
     const im = new Image();
     im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
@@ -67,7 +69,7 @@
       items.forEach((it) => {
         it.y += it.vy * dt; it.rot += dt * 0.002;
         g.save(); g.translate(it.x, it.y); g.rotate(Math.sin(it.rot) * 0.3);
-        if (imgs[it.kind].complete) g.drawImage(imgs[it.kind], -22, -22, 44, 44);
+        if (ready(imgs[it.kind])) g.drawImage(imgs[it.kind], -22, -22, 44, 44);
         g.restore();
         if (it.y > H - 70 && it.y < H - 40 && Math.abs(it.x - basket) < 44 && !it.done) {
           it.done = true;
@@ -90,6 +92,7 @@
       raf = requestAnimationFrame(frame);
     }
     raf = requestAnimationFrame(frame);
+    root._game = { get items() { return items; }, get basket() { return basket; }, W }; // para las pruebas automáticas
     return { stop() { running = false; cancelAnimationFrame(raf); } };
   }
 
@@ -166,6 +169,7 @@
         setTimeout(() => { a.classList.remove('up'); c.classList.remove('up'); busy = false; }, 700);
       }
     });
+    root._game = { deck };
     return { stop() { alive = false; clearInterval(timer); } };
   }
 
@@ -225,6 +229,7 @@
       raf = requestAnimationFrame(frame);
     }
     raf = requestAnimationFrame(frame);
+    root._game = { get items() { return items; }, W, H };
     return { stop() { running = false; cancelAnimationFrame(raf); } };
   }
 
@@ -267,6 +272,7 @@
       }
     });
     next();
+    root._game = { get seq() { return seq; } };
     return { stop() { alive = false; timers.forEach(clearTimeout); } };
   }
 
@@ -274,19 +280,24 @@
   function jumpGame(root, finish) {
     const S0 = N.core.state, p = S0.pet;
     root.innerHTML = `<div class="g-catch"><div class="g-top"><span>Saltos <b class="sc">0</b></span><span>Vidas <b class="lv">3</b></span><span>Tiempo <b class="tm">25</b></span></div>
-      <canvas class="g-canvas" width="360" height="420" aria-label="Juego: saltá las piedras"></canvas>
-      <p class="g-hint">Tocá la pantalla (o la barra espaciadora) para saltar.</p></div>`;
+      <canvas class="g-canvas g-jump" width="360" height="420" aria-label="Juego: saltá las piedras"></canvas>
+      <p class="g-hint">Tocá la pantalla (o la barra espaciadora) para saltar. Saltá cuando la piedra se acerque.</p></div>`;
     const cv = root.querySelector('canvas'), g = cv.getContext('2d');
-    const { W, H } = hiDPI(cv), DUR = 25000, MAX = 20, GY = H - 70;
+    const { W, H } = hiDPI(cv), DUR = 25000, MAX = 12, GY = H - 70; // salen ~15 piedras: 12 ya es puntaje perfecto
     const showSc = show(root.querySelector('.sc')), showTm = show(root.querySelector('.tm')), showLv = show(root.querySelector('.lv'));
     const petImg = imgFromSVG(art.petSVG({ species: p ? p.species : 'dragon', stage: p && p.stage !== 'egg' ? p.stage : 'baby', variant: p ? p.variant : 'normal', mood: 'happy', dir: 1, accessory: S0.wearing, walking: true }).replace('<svg ', '<svg width="240" height="200" '));
     const rockImg = imgFromSVG('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 40"><path d="M4 38c-2-10 6-24 18-26 11-2 22 6 22 16 0 8-6 10-18 10z" fill="#8d8a9c" stroke="#5f5c70" stroke-width="2.5"/><path d="M14 24c3-3 7-4 10-3" stroke="#b9b6c7" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>');
     const sky = g.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, '#bfe8ff'); sky.addColorStop(1, '#fff3d6');
-    const PW = 132, PH = 110, PX = 36;
-    let y = 0, vy = 0, rocks = [], spawn = 900, score = 0, lives = 3, hurt = 0, played = 0, last = performance.now(), running = true, raf = 0, scroll = 0;
-    const jump = () => { if (!running) return; if (y >= -1) { vy = -0.95; snd.play('tap'); } };
+    // La mascota se dibuja en un cuadro de 132×110 pero el cuerpo ocupa el centro: el choque usa sólo el cuerpo
+    const PW = 132, PH = 110, PX = 30, BX0 = PX + PW * 0.36, BX1 = PX + PW * 0.66;
+    const V0 = -1.05, GRAV = 0.0025, AIR = 2 * -V0 / GRAV; // ~0,84 s en el aire y ~220 px de alto: da tiempo de sobra para pasar una piedra
+    let pairNext = false, y = 0, vy = 0, rocks = [], spawn = 1400, score = 0, lives = 3, hurt = 0, played = 0, last = performance.now(), running = true, raf = 0, scroll = 0, queued = -1;
+    let sp = 0.2;
+    const st = { get y() { return y; }, get rocks() { return rocks; }, get score() { return score; }, get lives() { return lives; }, get sp() { return sp; }, get petOk() { return ready(petImg); }, BX0, BX1 };
+    // Si toca un poquito antes de caer, salta apenas toca el piso (antes el toque se perdía)
+    const jump = () => { if (!running) return; if (y >= -1) { vy = V0; y = -0.01; queued = -1; snd.play('tap'); } else queued = played; };
     cv.addEventListener('pointerdown', (e) => { e.preventDefault(); jump(); });
-    const onKey = (e) => { if (e.code === 'Space' || e.key === ' ' || e.key === 'ArrowUp') { e.preventDefault(); jump(); } };
+    const onKey = (e) => { if (e.code === 'Space' || e.key === ' ' || e.key === 'ArrowUp') { e.preventDefault(); if (!e.repeat) jump(); } };
     window.addEventListener('keydown', onKey);
     cv.style.touchAction = 'none';
     function frame(now) {
@@ -294,18 +305,25 @@
       if (now - last < 14) { raf = requestAnimationFrame(frame); return; }
       const raw = Math.max(0, now - last), dt = Math.min(40, raw); last = now;
       const el = (played += Math.min(250, raw));
-      const sp = 0.22 + el / 90000; // la velocidad sube de a poco
-      // física del salto
-      vy += 0.0032 * dt; y = Math.min(0, y + vy * dt); if (y === 0) vy = 0;
-      // piedras
-      spawn -= dt;
-      if (spawn <= 0) { rocks.push({ x: W + 20, w: 34 + Math.random() * 14, passed: false }); spawn = 750 + Math.random() * 900 - Math.min(400, el / 60); }
-      rocks.forEach((r) => { r.x -= sp * dt; });
-      rocks.forEach((r) => {
-        const hit = r.x < PX + PW * 0.72 && r.x + r.w > PX + PW * 0.3 && y > -30;
-        if (hit && !r.hit && hurt <= 0) { r.hit = true; lives--; hurt = 900; snd.play('bad'); showLv(lives); }
-        if (!r.passed && r.x + r.w < PX + PW * 0.3) { r.passed = true; if (!r.hit) { score++; showSc(score); snd.play('good'); } }
-      });
+      sp = 0.2 + el / 100000; // la velocidad sube de a poco (0,20 → 0,45 px/ms)
+      if (y < 0 || vy < 0) { vy += GRAV * dt; y += vy * dt; if (y >= 0) { y = 0; vy = 0; if (queued >= 0 && played - queued < 180) jump(); queued = -1; } }
+      // piedras: separadas en distancia (no en tiempo) para que siempre se puedan saltar de a una o de a dos juntas
+      spawn -= sp * dt;
+      if (spawn <= 0) {
+        const pair = !pairNext && el > 8000 && Math.random() < 0.18; // a veces dos piedras chicas pegadas
+        const w = pair || pairNext ? 26 + Math.random() * 6 : 30 + Math.random() * 14;
+        rocks.push({ x: W + 10, w, h: w * 0.83, passed: false });
+        // la distancia a la próxima siempre deja aterrizar y volver a saltar
+        spawn = pair ? w + 2 : sp * AIR + 140 + Math.random() * 200;
+        pairNext = pair;
+      }
+      for (const r of rocks) {
+        r.x -= sp * dt;
+        // choque: el cuerpo pisa la piedra y los pies están más bajos que el 70 % de su altura
+        const hit = r.x + r.w * 0.15 < BX1 && r.x + r.w * 0.85 > BX0 && -y < r.h * 0.7;
+        if (hit && !r.hit) { r.hit = true; if (hurt <= 0) { lives--; hurt = 900; snd.play('bad'); showLv(lives); } } // la piedra que se atraviesa parpadeando no suma
+        if (!r.passed && r.x + r.w < BX0) { r.passed = true; if (!r.hit) { score++; showSc(score); snd.play('good'); } }
+      }
       rocks = rocks.filter((r) => r.x > -60);
       if (hurt > 0) hurt -= dt;
       scroll = (scroll + sp * dt) % 40;
@@ -313,13 +331,16 @@
       g.fillStyle = sky; g.fillRect(0, 0, W, H);
       g.fillStyle = '#9fd67a'; g.fillRect(0, GY, W, H - GY);
       g.fillStyle = '#7cbf5a'; for (let x = -scroll; x < W; x += 40) g.fillRect(x, GY + 8, 20, 4);
-      rocks.forEach((r) => { if (rockImg.complete) g.drawImage(rockImg, r.x, GY - r.w * 0.8 + 6, r.w, r.w * 0.83); });
-      if (!(hurt > 0 && Math.floor(hurt / 120) % 2)) { if (petImg.complete) g.drawImage(petImg, PX, GY - PH + 6 + y * 1, PW, PH); }
+      if (ready(rockImg)) for (const r of rocks) g.drawImage(rockImg, r.x, GY - r.h + 4, r.w, r.h);
+      // sombra en el piso: ayuda a medir el salto
+      g.fillStyle = 'rgba(0,0,0,.14)'; g.beginPath(); g.ellipse((BX0 + BX1) / 2, GY + 4, 26 * (1 + y / 400), 5, 0, 0, Math.PI * 2); g.fill();
+      if (!(hurt > 0 && Math.floor(hurt / 120) % 2)) { if (ready(petImg)) g.drawImage(petImg, PX, GY - PH + 6 + y, PW, PH); }
       showTm(Math.max(0, Math.ceil((DUR - el) / 1000)));
       if (el >= DUR || lives <= 0) { running = false; window.removeEventListener('keydown', onKey); finish(Math.min(score, MAX), MAX); return; }
       raf = requestAnimationFrame(frame);
     }
     raf = requestAnimationFrame(frame);
+    root._game = st; // para las pruebas automáticas
     return { stop() { running = false; cancelAnimationFrame(raf); window.removeEventListener('keydown', onKey); } };
   }
 

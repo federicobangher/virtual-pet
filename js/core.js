@@ -3,7 +3,7 @@
   'use strict';
   const N = (window.N = window.N || {});
   const MIN = 60e3, HOUR = 3600e3, DAY = 24 * HOUR;
-  N.APP = { name: 'Virtual Pet', version: '1.10.0', author: 'Facundo Bangher' };
+  N.APP = { name: 'Virtual Pet', version: '1.11.0', author: 'Facundo Bangher' };
 
   const SPECIES = {
     dragon: { name: 'Dragón', fav: 'Carne asada', egg: 'Huevo escamado', hint: 'Comilón: le da hambre seguido' },
@@ -533,6 +533,117 @@
     return out.sort((a, b) => a.at - b.at);
   }
 
+  /* --------- cómo está y qué hacer (para los porcentajes y la ayuda de nivel) --------- */
+  // "~40 min", "~2 h", "~1 h 30 min"
+  function dur(ms) {
+    const m = Math.max(1, Math.round(ms / MIN));
+    if (m < 55) return '~' + (m < 10 ? m : Math.round(m / 5) * 5) + ' min';
+    const h = Math.floor(m / 60), r = Math.round((m - h * 60) / 15) * 15;
+    if (r === 60) return '~' + (h + 1) + ' h';
+    return '~' + h + ' h' + (r ? ' ' + r + ' min' : '');
+  }
+  // Todo lo que muestra la hoja "Cómo está": % de cada barra, cuánto falta, cuándo va a pedir y qué hacer
+  // (los puntos salen de las mismas reglas de las acciones de arriba)
+  function advice(opts) {
+    const p = S && S.pet;
+    if (!p || p.dead || p.stage === 'egg') return null;
+    const t = now(), sleeping = p.sleeping, sick = p.sick;
+    const pr = opts && opts.quick ? [] : predict(DAY, 10 * MIN);
+    const askIn = (id) => { const e = pr.find((x) => x.id === id && x.level === 1) || pr.find((x) => x.id === id); return e ? e.at - t : null; };
+    const inv = (k) => S.inv[k] || 0;
+    const fullSleep = (100 - p.energy) / -R.asleep.energy * HOUR;
+    const meters = {};
+    const mk = (k, todo, xp, extra) => {
+      const v = Math.round(p[k]), a = ASKS[k];
+      const status = v < a.urgentAt ? 'urgent' : v < a.ask ? 'ask' : 'ok';
+      const asks = status === 'ok' && !sleeping ? askIn(k) : null;
+      meters[k] = Object.assign({ k, v, missing: 100 - v, status, todo, xp: xp || 0, asksIn: asks }, extra || {});
+    };
+    // comida
+    {
+      const f = p.food, xp = f < 50 ? 8 : f < 80 ? 3 : 0;
+      const n = Math.ceil((100 - f) / ITEMS.fruit.food);
+      mk('food', f >= 96 ? 'Está lleno.' : sleeping ? 'Cuando se despierte, dale de comer.'
+        : `Dale de comer: una fruta llena ${ITEMS.fruit.food}% y su comida favorita ${ITEMS.fav.food}%` + (f < 80 ? ` (para llenarlo: ${n} fruta${n > 1 ? 's' : ''}).` : '.')
+        + (!inv('fruit') && !inv('fav') ? ' No te queda comida: comprá en la tienda.' : ''), xp,
+      { xpText: f < 50 ? 'Con hambre (menos de 50%) suma 8 puntos, 10 con su favorita' : f < 80 ? 'Ahora suma 3 puntos; con hambre (menos de 50%) suma 8' : 'Con hambre (menos de 50%) suma 8 puntos' });
+    }
+    // energía
+    {
+      const e = p.energy;
+      const todo = sleeping ? `Está durmiendo: se llena en ${dur(fullSleep)}` + (isNight(t) ? ' (de noche duerme hasta la mañana).' : '.')
+        : e > 85 ? 'Tiene energía de sobra: todavía no quiere dormir.'
+        : e >= 60 ? `Todavía no necesita dormir (para llenarla le faltan ${dur(fullSleep)} de sueño).`
+        : `Dejalo dormir ${dur(fullSleep)} para llenarla (dormido recupera ${-R.asleep.energy}% por hora).`;
+      const xpOk = (sleeping ? p.sleepE0 != null && p.sleepE0 < 45 : e < 45);
+      mk('energy', todo, 0, { sleepFor: fullSleep, xpText: xpOk ? `Si duerme al menos ${dur(35 / -R.asleep.energy * HOUR)} seguidos suma 8 puntos al despertar` : 'Si lo hacés dormir cuando está cansado (menos de 45%) suma 8 puntos al despertar' });
+      if (!sleeping && e < 45) meters.energy.xp = 8;
+    }
+    // diversión
+    {
+      const f = p.fun;
+      mk('fun', sleeping ? 'Cuando se despierte, jugá con él.' : f >= 96 ? 'Está re contento.'
+        : 'Jugá un minijuego (sube 15% a 35%) o acaricialo (+3%).', f < 60 ? 5 : 1,
+      { xpText: f < 60 ? 'Aburrido (menos de 60%): cada juego suma 5 a 17 puntos según cómo te vaya' : 'Ahora un juego suma 1 a 4 puntos; aburrido (menos de 60%) suma 5 a 17' });
+    }
+    // higiene
+    {
+      const g = p.hygiene, np = p.poops.length;
+      mk('hygiene', (np ? `Limpiá la caca (${np}): ensucia y lo puede enfermar. ` : '') + (g >= 95 ? 'Está limpito.' : sleeping ? 'Cuando se despierte, bañalo.' : 'Bañalo: queda en 100%.'),
+        (g < 50 ? 8 : g < 75 ? 3 : 0) + 4 * np,
+        { xpText: 'Bañarlo sucio (menos de 50%) suma 8 puntos; cada caca que limpiás, 4' });
+    }
+    // salud
+    {
+      const h = p.health;
+      const todo = sick ? 'Está enfermo: dale el remedio' + (inv('medicine') ? '.' : ' (comprá uno en la tienda).')
+        : h < 98 && h < 60 ? 'Está débil: dale vitaminas' + (inv('vitamins') ? '.' : ' (en la tienda).') + ' También se recupera sola si comida, diversión e higiene están arriba de 35%.'
+        : h < 98 ? 'Se recupera sola si comida, diversión e higiene están arriba de 35%.'
+        : 'Está sano. Para que no se enferme: limpiá la caca y no lo dejes sucio ni con hambre.';
+      mk('health', todo, sick ? 15 : h < 60 ? 5 : 0, { sick, xpText: 'Curarlo suma 15 puntos; vitaminas con la salud baja (menos de 60%), 5' });
+      if (sick) meters.health.status = 'urgent';
+    }
+    // nivel
+    const max = p.level >= R.maxLevel, need = xpNeed(p.level), left = max ? 0 : Math.max(0, need - p.xp);
+    const cared = !sick && p.food > 40 && p.energy > 30 && p.fun > 40 && p.hygiene > 40;
+    const tips = [];
+    const add = (xp, text, nowOk) => tips.push({ xp, text, now: !!nowOk });
+    if (!sleeping) {
+      if (sick) add(15, 'Dale el remedio', true);
+      if (p.food < 50) add(8, 'Dale de comer', true);
+      if (p.energy < 45) add(8, `Hacelo dormir ${dur(fullSleep)}`, true);
+      if (p.hygiene < 50) add(8, 'Bañalo', true);
+      if (p.poops.length) add(4 * p.poops.length, 'Limpiá la caca', true);
+      if (p.fun < 60 && !sick && p.energy >= 12) add('5–17', 'Jugá un minijuego', true);
+      if (!sick && p.health < 60) add(5, 'Dale vitaminas', true);
+    } else if (p.sleepE0 != null && p.sleepE0 < 45) add(8, `Dejalo dormir: se despierta solo en ${dur(fullSleep)}`, true);
+    const stageNext = p.stage === 'baby' ? { lv: R.lvYoung, name: 'joven', minAge: R.minAgeYoung } : p.stage === 'young' ? { lv: R.lvAdult, name: 'adulto', minAge: R.minAgeAdult } : null;
+    let ptsToStage = 0;
+    if (stageNext) { for (let l = p.level; l < stageNext.lv; l++) ptsToStage += xpNeed(l); ptsToStage = Math.max(0, Math.ceil(ptsToStage - p.xp)); }
+    const level = {
+      level: p.level, xp: Math.floor(p.xp), need, left: Math.ceil(left), max, pct: max ? 100 : Math.floor((p.xp / need) * 100),
+      cared, passiveIn: cared && !max ? left / R.xpPerHourCared * HOUR : null, perHour: R.xpPerHourCared,
+      tips,
+      stage: stageNext && { name: stageNext.name, lv: stageNext.lv, pts: ptsToStage, waitAge: Math.max(0, stageNext.minAge - p.age) },
+    };
+    return { meters, level, sleeping, sick };
+  }
+  // Una sola línea para debajo de la barra de nivel: lo más útil para sumar puntos ahora
+  const NAMES = { food: 'la comida', energy: 'la energía', fun: 'la diversión', hygiene: 'la higiene' };
+  function xpTip() {
+    const a = advice({ quick: true });
+    if (!a) return null;
+    const L = a.level, p = S.pet;
+    if (L.max) return { text: '¡Llegó al nivel máximo!', xp: 0 };
+    const t = L.tips[0];
+    if (t) return { text: t.text, xp: t.xp };
+    if (L.cared) return { text: `Bien cuidado suma ${L.perHour} por hora: sube en ${dur(L.passiveIn)}`, xp: 0, passive: true };
+    if (a.sleeping) return { text: 'Durmiendo: al despertar, cuidalo para sumar puntos', xp: 0 };
+    if (p.sick) return { text: 'Curalo para que vuelva a sumar puntos', xp: 0 };
+    const low = Object.keys(NAMES).filter((k) => p[k] <= (k === 'energy' ? 30 : 40)).sort((x, y) => p[x] - p[y])[0];
+    return { text: low ? `Subí ${NAMES[low]} (${Math.round(p[low])}%) para que sume ${L.perHour} por hora` : 'Cuidalo para sumar puntos', xp: 0 };
+  }
+
   /* --------- premio diario --------- */
   // (si el reloj se atrasó y "hoy" quedó antes del último cobro, no se vuelve a cobrar)
   function dailyPending() { const d = dayKey(now()); return d !== S.daily.last && !(S.daily.last && d < S.daily.last); }
@@ -804,7 +915,9 @@
     if (!st || typeof st !== 'object' || typeof st.coins !== 'number') return no('El archivo no es una copia de Virtual Pet.');
     if (st.pet && !SPECIES[st.pet.species]) return no('La copia está dañada.');
     S = migrate(Object.assign(freshState(), st));
-    S.lastSeen = Math.min(S.lastSeen || now(), now());
+    // la mascota sigue tal como estaba en la copia: no se le cobra el tiempo que pasó desde que se guardó
+    // (antes, recuperar una copia vieja la encontraba muerta de hambre)
+    S.lastSeen = now();
     save();
     N.emit('reset');
     N.emit('change');
@@ -814,7 +927,7 @@
   N.core = {
     SPECIES, ITEMS, BACKGROUNDS, GAMES, PACKS, WEAR, R, HOUR, MIN, DAY, predict, ASKS,
     load, save, resume, tick, advance, step, claimDaily, dailyPending,
-    mood, needs, ageText, xpNeed, addXP, isNight, exportState, importState, ACHIEVEMENTS, TRAITS, checkAchievements, stageName, careAvg, isLocked, dayKey, newPet, freshState,
+    mood, needs, ageText, xpNeed, advice, xpTip, dur, addXP, isNight, exportState, importState, ACHIEVEMENTS, TRAITS, checkAchievements, stageName, careAvg, isLocked, dayKey, newPet, freshState,
     get state() { return S; },
     set state(v) { S = v; },
     get storageOk() { return storageOk; },

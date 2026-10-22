@@ -97,11 +97,16 @@
         <div class="who"><span class="pname"></span><span class="chip pstage"></span></div>
         <button class="coins" type="button" title="Tus monedas — abrir la tienda">${coinIc()}<b class="ncoins">0</b></button>
       </div>`);
-    P.level = h(`<div class="level" hidden><span class="lvnum">Nivel 0</span><span class="bar xp" title="Puntos para el próximo nivel"><i></i></span><span class="lvnext"></span></div>`);
+    P.level = h(`<div class="level" hidden><span class="lvnum">Nivel 0</span><span class="bar xp" title="Puntos para el próximo nivel"><i></i></span><span class="lvnext"></span>
+      <button type="button" class="lvtip" title="Cómo sumar puntos y subir de nivel"><span class="lt-ic">${ic('star')}</span><span class="lt-tx"></span><b class="lt-xp"></b><span class="lt-more">¿Cómo subo?</span></button></div>`);
     P.meters = h(`<div class="meters" role="list"></div>`);
     METERS.forEach((m) => {
-      P.meters.appendChild(h(`<div class="meter m-${m.k}" role="listitem" title="${m.label}"><span class="mi">${ic(m.icon)}</span><span class="bar"><i></i></span><span class="ml">${m.label}</span></div>`));
+      P.meters.appendChild(h(`<button type="button" class="meter m-${m.k}" role="listitem" data-k="${m.k}" title="${m.label}"><span class="mi">${ic(m.icon)}</span><span class="bar"><i></i></span><span class="ml"><span class="mn">${m.label}</span> <b class="mp">0%</b></span></button>`));
     });
+    // Tocar una barra (o la ayuda del nivel) abre "Cómo está": porcentajes, cuánto falta y qué hacer
+    P.meters.addEventListener('click', (e) => { const b = e.target.closest('.meter'); if (b) { snd.unlock(); snd.play('tap'); openSheet('status', b.dataset.k); } });
+    P.level.querySelector('.lvtip').addEventListener('click', () => { snd.unlock(); snd.play('tap'); openSheet('status', 'level'); });
+    P.tipAt = 0; P.tipKey = '';
     P.eggbar = h(`<div class="eggbar" hidden><div class="eggrow"><span>Calor</span><span class="bar warmth"><i></i></span></div><div class="eggrow"><span>Nacimiento</span><span class="bar hatch"><i></i></span></div></div>`);
     P.actions = h(`<div class="actions"></div>`);
     root.append(P.hud, P.level, P.meters, P.eggbar, P.actions);
@@ -154,8 +159,20 @@
       const max = p.level >= C.R.maxLevel;
       setText(P.level.querySelector('.lvnum'), 'Nivel ' + p.level);
       setW(P.level.querySelector('.xp i'), max ? 100 : Math.min(100, Math.round((p.xp / C.xpNeed(p.level)) * 1000) / 10));
-      setText(P.level.querySelector('.lvnext'), max ? '¡Máximo!' : Math.floor(p.xp) + ' / ' + C.xpNeed(p.level));
+      setText(P.level.querySelector('.lvnext'), max ? '¡Máximo!' : Math.floor(p.xp) + ' / ' + C.xpNeed(p.level) + ' pts');
       setCls(P.level, 'max', max);
+      // consejo para sumar puntos (se recalcula cada 5 s o cuando cambia algo importante)
+      const tk = [p.level, Math.floor(p.xp), p.sleeping, p.sick, p.poops.length, p.food < 50, p.energy < 45, p.hygiene < 50, p.fun < 60, p.health < 60].join();
+      const tn = Date.now();
+      if (tk !== P.tipKey || tn - P.tipAt > 5000) {
+        P.tipKey = tk; P.tipAt = tn;
+        const tip = C.xpTip();
+        if (tip) {
+          setText(P.level.querySelector('.lt-tx'), tip.text);
+          const xe = P.level.querySelector('.lt-xp'); setText(xe, tip.xp ? '+' + tip.xp + ' pts' : ''); setHidden(xe, !tip.xp);
+          setCls(P.level.querySelector('.lvtip'), 'now', !!tip.xp);
+        }
+      }
     }
     setHidden(P.eggbar, !egg);
     if (p && !egg) {
@@ -165,7 +182,8 @@
         setW(el.querySelector('i'), v);
         if (v < 25 && !el.classList.contains('low')) { el.classList.add('low'); ping(el, 3200); }
         else if (v >= 25) setCls(el, 'low', false);
-        const ti = `${m.label}: ${v}%`;
+        setText(el.querySelector('.mp'), v + '%');
+        const ti = `${m.label}: ${v}% — tocá para ver qué hacer`;
         if (el.title !== ti) el.title = ti;
       });
     }
@@ -293,10 +311,10 @@
     else if (a === 'look') {
       const d0 = v.dir;
       v.setAct('look', 2300);
-      setTimeout(() => { v.dir = -d0; v.render(); }, 500);
-      setTimeout(() => { v.dir = d0; v.render(); }, 1300);
-      setTimeout(() => { v.dir = -d0; v.render(); }, 1800);
-      setTimeout(() => { v.dir = d0; v.render(); }, 2200);
+      setTimeout(() => { if (!v.walking && !v.flying) { v.dir = -d0; v.render(); } }, 500);
+      setTimeout(() => { if (!v.walking && !v.flying) { v.dir = d0; v.render(); } }, 1300);
+      setTimeout(() => { if (!v.walking && !v.flying) { v.dir = -d0; v.render(); } }, 1800);
+      setTimeout(() => { if (!v.walking && !v.flying) { v.dir = d0; v.render(); } }, 2200);
     } else if (a === 'butterfly') butterfly();
     else if (a === 'special') special();
   }
@@ -331,7 +349,7 @@
     const times = [0, 1000, 2000, 3000, 4000, 5000];
     times.forEach((ms, i) => setTimeout(() => {
       const [x0] = pts[i], [x1] = pts[i + 1];
-      v.dir = x1 > x0 ? 1 : -1; v.render();
+      if (!v.walking && !v.flying) { v.dir = x1 > x0 ? 1 : -1; v.render(); } // (si salió caminando a buscarte, no camina para atrás)
     }, ms));
     anim.onfinish = () => el.remove();
     setTimeout(() => el.remove(), 6500);
@@ -524,7 +542,66 @@
     });
   }
 
+  /* "Cómo está": cada barra con su %, cuánto le falta, cuándo va a pedir y qué hacer; y cómo subir de nivel */
+  const STATUS_ACT = { food: 'food', energy: 'energy', fun: 'fun', hygiene: 'hygiene', health: 'health' };
+  function statusHTML(focus) {
+    const a = C.advice();
+    if (!a) return '<p class="hint">Todavía no hay nada para mostrar.</p>';
+    const chip = (st) => st === 'urgent' ? '<span class="st-chip urgent">¡Urgente!</span>' : st === 'ask' ? '<span class="st-chip ask">Lo pide</span>' : '<span class="st-chip ok">Bien</span>';
+    const L = a.level;
+    const pts = (x) => `<b class="st-xp">+${x} ${x === 1 ? 'pt' : 'pts'}</b>`;
+    let lv = `<section class="st-level${focus === 'level' ? ' focus' : ''}" data-k="level"><div class="st-head"><span class="lvnum">Nivel ${L.level}</span><b class="st-big">${L.max ? '¡Máximo!' : L.pct + '%'}</b></div>`;
+    if (!L.max) {
+      lv += `<span class="bar xp"><i style="transform:translateX(${L.pct - 100}%)"></i></span><p class="st-line"><b>${L.xp} de ${L.need} puntos</b> · le faltan <b>${L.left}</b> para el nivel ${L.level + 1}.</p>`;
+      if (L.tips.length) lv += '<h4>Para sumar puntos ahora</h4><ul class="st-tips">' + L.tips.map((t) => `<li>${esc(t.text)} ${pts(t.xp)}</li>`).join('') + '</ul>';
+      lv += '<h4>Siempre suma</h4><ul class="st-tips">'
+        + `<li>${L.cared ? `Así de bien cuidado suma <b>${L.perHour} puntos por hora</b> solo: sube de nivel en <b>${C.dur(L.passiveIn)}</b>.` : `Bien cuidado (comida, diversión e higiene arriba de 40%, energía arriba de 30% y sano) suma <b>${L.perHour} puntos por hora</b>. <b>Ahora no está sumando.</b>`}</li>`
+        + `<li>Darle de comer con hambre (menos de 50%) ${pts(8)} · su comida favorita ${pts(10)}</li>`
+        + `<li>Hacerlo dormir cuando está cansado (menos de 45%) y dejarlo dormir <b>${C.dur(35 / 30 * C.HOUR)}</b> o más ${pts(8)}</li>`
+        + `<li>Bañarlo sucio (menos de 50%) ${pts(8)} · limpiar cada caca ${pts(4)}</li>`
+        + `<li>Jugar cuando está aburrido (menos de 60%) ${pts('5–17')}</li>`
+        + `<li>Curarlo si se enferma ${pts(15)} · vitaminas con la salud baja ${pts(5)}</li>`
+        + `<li>Acariciarlo ${pts(1)} cada 10 minutos · premio diario ${pts(10)}</li></ul>`;
+      if (L.stage) lv += `<p class="st-line st-grow">Crece a <b>${L.stage.name}</b> en el nivel ${L.stage.lv}${L.stage.pts ? ` (le faltan ${L.stage.pts} puntos)` : ''}${L.stage.waitAge > 0 ? ` y con ${C.dur(L.stage.waitAge)} más de vida` : ''}.</p>`;
+    }
+    lv += '</section>';
+    const rows = METERS.map((m) => {
+      const r = a.meters[m.k];
+      const when = r.v >= 100 ? 'Está al máximo.' : `Le falta <b>${r.missing}%</b> para llegar al máximo.`;
+      const asks = r.asksIn != null ? ` Va a pedir en <b>${C.dur(r.asksIn)}</b>.` : '';
+      const act = NEED_ACTIONS[m.k === 'health' ? (r.sick ? 'sick' : 'health') : m.k];
+      const showBtn = act && !a.sleeping && (r.status !== 'ok' || r.missing >= 20 || (m.k === 'health' && r.sick)) && !(m.k === 'health' && !r.sick && r.v >= 60) && !(m.k === 'energy' && r.v >= 60);
+      return `<section class="st-row m-${m.k}${focus === m.k ? ' focus' : ''}" data-k="${m.k}"><div class="st-head"><span class="mi">${ic(m.icon)}</span><b class="st-name">${m.label}</b>${chip(r.status)}<b class="st-big">${r.v}%</b></div>
+        <span class="bar"><i style="transform:translateX(${r.v - 100}%)"></i></span>
+        <p class="st-line">${when}${asks}</p><p class="st-todo">${esc(r.todo)}</p><p class="st-xpline">${ic('star')} ${esc(r.xpText)}</p>
+        ${showBtn ? `<button type="button" class="btn small" data-need="${r.sick && m.k === 'health' ? 'sick' : m.k}">${ic(act.icon)} ${act.label}</button>` : ''}</section>`;
+    }).join('');
+    return (focus === 'level' ? lv + rows : rows + lv) + (a.sleeping ? '<p class="hint">Está durmiendo: mientras duerme casi no gasta y no pide nada.</p>' : '');
+  }
+
+  const scroller = (n) => n.closest('.sheet-body') || n.closest('.dcard-body');
   const SHEETS = {
+    status(focus) {
+      const node = h('<div class="status"></div>');
+      let last = 0;
+      const render = (force) => {
+        const t = Date.now(); if (!force && t - last < 1500) return; last = t;
+        const box = scroller(node), sc = box ? box.scrollTop : 0;
+        setHTML(node, statusHTML(focus));
+        if (box && box.scrollTop !== sc) box.scrollTop = sc;
+      };
+      render(true);
+      node.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-need]'); if (!b) return;
+        const a = NEED_ACTIONS[b.dataset.need]; if (!a) return;
+        snd.unlock(); snd.play('tap');
+        if (['food', 'fun', 'sick', 'health'].includes(b.dataset.need)) a.run(); // abren su propia hoja
+        else { a.run(); render(true); }
+      });
+      // (sin scrollIntoView: puede correr la página entera, como el error de 1.9)
+      if (focus) setTimeout(() => { const el = node.querySelector('.focus'), box = scroller(node); if (el && box) { const head = box.querySelector('.dsheet-head'); box.scrollTop += el.getBoundingClientRect().top - box.getBoundingClientRect().top - (head ? head.offsetHeight : 0) - 8; } }, 30);
+      return { title: 'Cómo está y qué hacer', node, refresh: () => render(false) };
+    },
     food() {
       const node = h('<div class="list"></div>');
       const render = () => { setHTML(node, ['fruit', 'fav', 'cake'].map((id) => itemRow(id, 'use')).join('')); };
@@ -1077,6 +1154,7 @@
     });
     // Botón "atrás" del celular: cierra lo que esté abierto en vez de salir del juego
     plat.setLayersQuery(() => !!(modalOpen || sheetName));
+    plat.layerChanged(); // (la ventana del premio diario se abre antes: sin esto, el primer "atrás" salía del juego)
     plat.onBack(() => { if (modalOpen) return backOnModal(); if (sheetName) { closeSheet(); return true; } return false; });
     let exitHintT = 0;
     plat.onBackExitHint = () => { const t = Date.now(); if (t - exitHintT > 3000) { exitHintT = t; say('Tocá "atrás" otra vez para salir', false, 2200); } };
