@@ -690,3 +690,6 @@ button.meter:focus-visible { outline: 2px solid var(--plum); outline-offset: 1px
 /* celular parado: abajo de cada barra sólo el número (el nombre está en "Cómo está"); en tablet, nombre y número */
 @media (max-width: 599px) { .mode-room .meter .mn { display: none; } }
 @media (orientation: landscape) and (max-height: 600px) { .mode-room .meter .mn { display: none; } }
+/* Windows: los juegos entran enteros en el panel, sin tener que deslizar (antes el Salto quedaba cortado) */
+.dcard .g-canvas { width: min(100%, calc((var(--card-maxh, 600px) - 17rem) * 360 / 420)); }
+.dcard .g-hint { margin: 0; font-size: .78rem; }

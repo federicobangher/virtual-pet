@@ -281,7 +281,7 @@
     const S0 = N.core.state, p = S0.pet;
     root.innerHTML = `<div class="g-catch"><div class="g-top"><span>Saltos <b class="sc">0</b></span><span>Vidas <b class="lv">3</b></span><span>Tiempo <b class="tm">25</b></span></div>
       <canvas class="g-canvas g-jump" width="360" height="420" aria-label="Juego: saltá las piedras"></canvas>
-      <p class="g-hint">Tocá la pantalla (o la barra espaciadora) para saltar. Saltá cuando la piedra se acerque.</p></div>`;
+      <p class="g-hint">Tocá o hacé clic (o la barra espaciadora) para saltar cuando se acerque una piedra.</p></div>`;
     const cv = root.querySelector('canvas'), g = cv.getContext('2d');
     const { W, H } = hiDPI(cv), DUR = 25000, MAX = 12, GY = H - 70; // salen ~15 piedras: 12 ya es puntaje perfecto
     const showSc = show(root.querySelector('.sc')), showTm = show(root.querySelector('.tm')), showLv = show(root.querySelector('.lv'));

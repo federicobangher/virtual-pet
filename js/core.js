@@ -3,7 +3,7 @@
   'use strict';
   const N = (window.N = window.N || {});
   const MIN = 60e3, HOUR = 3600e3, DAY = 24 * HOUR;
-  N.APP = { name: 'Virtual Pet', version: '1.11.2', author: 'Facundo Bangher' };
+  N.APP = { name: 'Virtual Pet', version: '1.11.3', author: 'Facundo Bangher' };
 
   const SPECIES = {
     dragon: { name: 'Dragón', fav: 'Carne asada', egg: 'Huevo escamado', hint: 'Comilón: le da hambre seguido' },
@@ -108,10 +108,10 @@
     // durmiendo recupera la energía en 2 a 3 horas (de noche igual sigue durmiendo hasta la mañana)
     asleep: { food: 3.5, fun: 1.5, hygiene: 2, energy: -30 },
     poopHygiene: 4,
-    // sin ningún cuidado se muere en ~1 día (nunca antes de ~20 h)
-    healthDmg: { sick: 2.5, food: 2.5, energy: 1.5, hygiene: 1.5, fun: 1 },
+    // sin ningún cuidado se muere en ~7 días (antes era ~1 día)
+    healthDmg: { sick: 0.2, food: 0.2, energy: 0.12, hygiene: 0.12, fun: 0.08 },
     healthRegen: 4,
-    lockout: DAY,
+    lockout: 0, // después de despedirla se puede empezar enseguida con un huevo nuevo (antes había que esperar 24 h)
     maxPoops: 4,
     shinyCare: 62,
   };
@@ -191,7 +191,7 @@
     Object.keys(st.inv).forEach((k) => { st.inv[k] = Math.max(0, Math.floor(num(st.inv[k], 0))); });
     if (st.wearing && !st.owned[st.wearing]) st.wearing = null;
     st.lockUntil = num(st.lockUntil, 0);
-    // si el reloj estuvo adelantado, la espera nunca supera las 24 horas desde ahora
+    // ya no hay espera después de una muerte: una partida vieja que estaba esperando queda libre
     if (st.lockUntil > now() + R.lockout) st.lockUntil = now() + R.lockout;
     if (st.pet && (typeof st.pet !== 'object' || !SPECIES[st.pet.species])) st.pet = null;
     if (st.pet) {
@@ -515,7 +515,7 @@
     const out = [];
     if (!S || !S.pet || S.pet.dead || S.pet.stage === 'egg') return out;
     const p = JSON.parse(JSON.stringify(S.pet));
-    const st = stepMs || 5 * MIN, end = Math.min(horizonMs || DAY, 2 * DAY);
+    const st = stepMs || 5 * MIN, end = Math.min(horizonMs || DAY, 8 * DAY); // (sin cuidados tarda ~7 días en morir)
     const seen = {};
     let t = now();
     const lowRand = () => 1; // sin cacas ni enfermedades sorpresa: avisa lo que seguro va a pasar
@@ -870,7 +870,7 @@
       S.pet.name = n;
       return done(ok(''));
     },
-    // Despedir a la mascota fallecida: pasa a los recuerdos. El bloqueo de 24 h sigue corriendo.
+    // Despedir a la mascota fallecida: pasa a los recuerdos y se puede elegir otro huevo enseguida.
     farewell() {
       const p = S.pet;
       if (!p || !p.dead) return no('');

@@ -790,7 +790,7 @@
   function saverOn() { const S = C.state; return !!(S && (S.settings.saver || (N.platform && N.platform.lowBattery))); }
   function ageOf(ms) { return C.ageText({ age: ms || 0 }); }
   const HELP = `<p>Tu mascota tiene cinco necesidades que bajan con el tiempo, aunque cierres el juego: <b>comida, energía, diversión, higiene y salud</b>.</p>
-    <p>Si la descuidás se enferma. Si se enferma y no le das el remedio, o pasa mucho tiempo sin comer, la salud baja. <b>Si la salud llega a cero, se muere</b> y tenés que esperar <b>24 horas</b> para empezar con un huevo nuevo.</p>
+    <p>Si la descuidás se enferma. Si se enferma y no le das el remedio, o pasa mucho tiempo sin comer, la salud baja. <b>Si la salud llega a cero, se muere</b> (sin ningún cuidado, tarda alrededor de una semana) y podés empezar enseguida con un huevo nuevo.</p>
     <p>Tiene <b>niveles del 0 al 100</b>. Sube de nivel cuando la cuidás y lo necesitaba (darle de comer cuando tiene hambre, bañarla cuando está sucia, jugar cuando se aburre, limpiar, dejarla dormir cuando está cansada) y con el tiempo, si está bien atendida. Cada nivel da monedas, y cada 10 niveles hay un premio grande.</p>
     <p>Crece de <b>bebé</b> a <b>joven</b> en el nivel 5 y a <b>adulto</b> en el nivel 20. Si la cuidaste muy bien, de adulta tiene una <b>forma brillante</b>.</p>
     <p>Cuando necesita algo, te lo pide con un globito y un ícono sobre la cabeza. Tocalos y lo atendés al instante.</p>
@@ -903,7 +903,7 @@
     const node = h(`<div class="modal death"><div class="grave">${art.graveSVG(p.species)}</div>
       <h2>${esc(p.name)} se fue al cielo de las mascotas</h2>
       <p class="sub">Vivió ${C.ageText(p)}. ${cause}</p>
-      <p class="sub">Vas a poder empezar con un huevo nuevo en <b>24 horas</b>. Mientras tanto podés seguir entrando para cobrar tu premio diario.</p>
+      <p class="sub">Cuando te despidas, podés elegir un huevo nuevo y empezar otra vez.</p>
       <button type="button" class="btn primary big" data-ok>Despedirme</button></div>`);
     return { node, persistent: true, onOk: () => { C.act.farewell(); return true; } };
   }
@@ -1016,6 +1016,9 @@
         const a = C.ASKS[ev.id]; if (!a) return;
         items.push({ at: morning(ev.at), title: p.name, body: pick(ev.level === 2 ? a.u : a.a) });
       });
+      // sin cuidados tarda ~7 días en morir: avisar medio día antes, aunque sea más allá de las 36 h de arriba
+      const death = C.predict(8 * C.DAY, 30 * C.MIN).find((ev) => ev.id === 'death');
+      if (death && death.at - t > 36 * C.HOUR) items.push({ at: morning(death.at - 12 * C.HOUR), title: p.name + ' está muy débil', body: '¡Entrá a cuidarlo antes de que sea tarde!' });
     }
     // premio diario de mañana
     const tm = new Date(t); tm.setDate(tm.getDate() + 1); tm.setHours(10, 0, 0, 0);

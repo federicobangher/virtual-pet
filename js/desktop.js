@@ -151,7 +151,7 @@
     if (cardOpen && cardPos) { sl(E.card, 'left', cardPos.x - b.x); sl(E.card, 'top', cardPos.y - b.y); }
     if (moved) queueHits(); // (caminando se mueve la ventana entera: las zonas tocables no cambian)
   }
-  function applyCardMax() { const v = cardMaxH() + 'px'; if (E.card.style.maxHeight !== v) E.card.style.maxHeight = v; }
+  function applyCardMax() { const v = cardMaxH() + 'px'; if (E.card.style.maxHeight !== v) { E.card.style.maxHeight = v; E.card.style.setProperty('--card-maxh', v); } } // (los juegos se achican para entrar sin desplazar)
   // Windows a veces no deja la ventana exactamente donde se pidió (monitores con distinta escala, ventana más
   // alta que la pantalla). Electron avisa dónde quedó de verdad y acá se reacomoda todo adentro, y si el panel
   // igual quedara cortado, se lo trae a la parte visible del monitor.
@@ -398,6 +398,7 @@
     E.sheetTitle.textContent = title;
     E.sheetBody.replaceChildren(node);
     E.panel.hidden = true; E.sheet.hidden = false;
+    E.card.querySelector('.dcard-body').scrollTop = 0; // cada hoja empieza arriba (antes heredaba lo deslizado del panel y el título tapaba el puntaje del juego)
     relayoutCard();
   };
   host.sheetClose = function () {
