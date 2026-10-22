@@ -3,7 +3,7 @@
   'use strict';
   const N = (window.N = window.N || {});
   const MIN = 60e3, HOUR = 3600e3, DAY = 24 * HOUR;
-  N.APP = { name: 'Virtual Pet', version: '1.11.4', author: 'Facundo Bangher' };
+  N.APP = { name: 'Virtual Pet', version: '1.11.5', author: 'Facundo Bangher' };
 
   const SPECIES = {
     dragon: { name: 'Dragón', fav: 'Carne asada', egg: 'Huevo escamado', hint: 'Comilón: le da hambre seguido' },
@@ -45,6 +45,8 @@
     { id: 'zoo', name: 'Zoológico', desc: 'Criá las 4 especies', coins: 100, test: (s) => Object.keys(s.stats.species).length >= 4 },
   ];
   const isNight = (t) => { const h = new Date(t).getHours(); return h >= 22 || h < 7; };
+  // Saludo según la hora (al despertarse): de 6 a 12 "Buenos días", de 12 a 20 "Buenas tardes" y si no "Buenas noches"
+  const greeting = (t) => { const h = new Date(t == null ? Date.now() : t).getHours(); return h >= 6 && h < 12 ? 'Buenos días' : h >= 12 && h < 20 ? 'Buenas tardes' : 'Buenas noches'; };
 
   /* Fondos del cuarto (celular). El primero es gratis; los demás se desbloquean con monedas. */
   const BACKGROUNDS = {
@@ -758,8 +760,8 @@
       if (p.sleeping) {
         p.sleeping = false;
         const xp = wakeXP(p);
-        if (p.energy < 40) { p.fun = clamp(p.fun - 8); return done(ok('Se despertó de mal humor…')); }
-        const r = done(ok('¡Buen día!'));
+        if (p.energy < 40) { p.fun = clamp(p.fun - 8); return done(ok(`Mmm… ${greeting(now()).toLowerCase()}. Se despertó de mal humor`)); }
+        const r = done(ok(`¡${greeting(now())}!`));
         if (xp) gain(xp);
         return r;
       }
@@ -927,7 +929,7 @@
   N.core = {
     SPECIES, ITEMS, BACKGROUNDS, GAMES, PACKS, WEAR, R, HOUR, MIN, DAY, predict, ASKS,
     load, save, resume, tick, advance, step, claimDaily, dailyPending,
-    mood, needs, ageText, xpNeed, advice, xpTip, dur, addXP, isNight, exportState, importState, ACHIEVEMENTS, TRAITS, checkAchievements, stageName, careAvg, isLocked, dayKey, newPet, freshState,
+    mood, needs, greeting, ageText, xpNeed, advice, xpTip, dur, addXP, isNight, exportState, importState, ACHIEVEMENTS, TRAITS, checkAchievements, stageName, careAvg, isLocked, dayKey, newPet, freshState,
     get state() { return S; },
     set state(v) { S = v; },
     get storageOk() { return storageOk; },

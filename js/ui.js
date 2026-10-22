@@ -1074,7 +1074,7 @@
     else if (e.type === 'sick') { snd.play('alert'); say('No me siento bien…', true); }
     else if (e.type === 'poop') { snd.play('tap'); }
     else if (e.type === 'collapse') { say('Se quedó dormido de cansancio', true); }
-    else if (e.type === 'wake') { snd.play('wake'); say(e.morning ? '¡Buen día! Ya es de mañana' : '¡Buen día!'); }
+    else if (e.type === 'wake') { snd.play('wake'); say(e.morning ? '¡Buenos días! Ya es de mañana' : `¡${C.greeting()}! Ya descansé`, false, 3000); }
     else if (e.type === 'death') { snd.play('death'); C.save(); flow(); }
     else if (e.type === 'achievement') {
       snd.play('coin');
@@ -1122,6 +1122,8 @@
   function onResume() {
     const r = C.resume();
     r.events.forEach((e) => { if (e.type === 'hatch' || e.type === 'grow') pushModal(() => eventModal(e)); });
+    // si se despertó mientras no estabas, te saluda al volver (según la hora)
+    if (r.events.some((e) => e.type === 'wake')) setTimeout(() => { const p = C.state.pet; if (p && !p.dead && !p.sleeping && !modalOpen) { snd.play('wake'); say(`¡${C.greeting()}!`, false, 3000); } }, 1500);
     const lv = r.events.filter((e) => e.type === 'levelup' && (e.level % 10 === 0 || e.level === C.R.maxLevel)).pop();
     if (lv) pushModal(() => levelModal(lv));
     if (r.gap > 20 * C.MIN && r.events.length >= 0) {
