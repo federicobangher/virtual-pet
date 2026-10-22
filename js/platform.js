@@ -62,6 +62,12 @@
   const ERR_KEY = 'vpet.errores';
   plat.errors = () => { try { return JSON.parse(localStorage.getItem(ERR_KEY) || '[]'); } catch (e) { return []; } };
   plat.clearErrors = () => { try { localStorage.removeItem(ERR_KEY); } catch (e) { /* nada */ } };
+  // Al actualizar, se borran los errores de versiones anteriores: el informe muestra sólo los de la versión instalada
+  // (antes quedaban los viejos y parecía que la versión nueva seguía fallando)
+  try {
+    const cur = (N.APP && N.APP.version) || '?', list = plat.errors(), keep = list.filter((x) => x && x.v === cur);
+    if (keep.length !== list.length) { if (keep.length) localStorage.setItem(ERR_KEY, JSON.stringify(keep)); else localStorage.removeItem(ERR_KEY); }
+  } catch (e) { /* sin almacenamiento */ }
   plat.logError = (msg, where) => {
     try {
       const list = plat.errors();
