@@ -179,9 +179,11 @@
     const [bx, by, brx, bry] = G.b;
     const [hx, hy, hr] = G.h;
     let s = '';
-    s += `<path class="tail" d="${G.tail}" fill="${c.body}" stroke="${c.dark}" stroke-width="1.5" style="transform-origin:${bx - brx * 0.6}px ${by + 8}px"/>`;
+    // la punta de la cola va dentro del mismo grupo que la cola: así se mueven juntas (antes quedaba suelta en el aire)
+    s += `<g class="tail" style="transform-origin:${bx - brx * 0.6}px ${by + 8}px"><path d="${G.tail}" fill="${c.body}" stroke="${c.dark}" stroke-width="1.5"/>`;
     if (stage === 'adult') s += `<path d="M-4 141 C-22 140 -22 118 -12 110 C-9 122 2 126 6 133 Z" fill="${c.dark}"/>`;
     if (stage === 'young') s += `<path d="M8 149 C-6 150 -8 134 0 128 C2 137 10 140 13 144 Z" fill="${c.dark}"/>`;
+    s += '</g>';
     s += batWing(G.wing[0], G.wing[1], G.wing[2], c, 'wing wing-back');
     s += foot(G.feet[0][0], G.feet[0][1], G.feet[0][2], G.feet[0][3], c.dark, 'foot foot-b');
     // espinas del lomo
@@ -465,7 +467,16 @@
     return '';
   }
 
-  function overlays(mood, head, variant, dir, act, species) {
+  // Dónde van las estrellitas de la forma brillante: en el aire alrededor de la mascota, sin tocarla nunca
+  // (calculado con tools/estrellas.py sobre la silueta de todos los cuadros de la animación, con accesorios;
+  // antes estaban en lugares fijos y caían encima del cuerpo, las alas o la cola)
+  const SPARKLES = {
+    dragon: { baby: [[46, 96], [160, 88], [98, 20]], young: [[6, 98], [198, 92], [108, 18]], adult: [[16, 82], [208, 72], [78, 28]] },
+    bird: { baby: [[52, 104], [148, 104], [104, 54]], young: [[50, 104], [160, 96], [64, 92]], adult: [[28, 96], [170, 78], [82, 22]] },
+    lizard: { baby: [[38, 120], [170, 110], [134, 62]], young: [[16, 112], [184, 112], [104, 80]], adult: [[4, 102], [194, 102], [138, 40]] },
+    turtle: { baby: [[62, 114], [174, 118], [126, 74]], young: [[42, 120], [184, 114], [122, 84]], adult: [[28, 112], [202, 110], [140, 60]] },
+  };
+  function overlays(mood, head, variant, dir, act, species, stage) {
     dir = dir === -1 ? -1 : 1;
     let s = '';
     if (act === 'special' && species === 'bird') {
@@ -494,7 +505,9 @@
     }
     if (variant === 'shiny' && mood !== 'dead') {
       const st = (x, y, k, cls) => `<path class="${cls}" d="M${x} ${y - 7 * k} L${x + 2 * k} ${y - 2 * k} L${x + 7 * k} ${y} L${x + 2 * k} ${y + 2 * k} L${x} ${y + 7 * k} L${x - 2 * k} ${y + 2 * k} L${x - 7 * k} ${y} L${x - 2 * k} ${y - 2 * k} Z" fill="#ffd23f" style="transform-origin:${x}px ${y}px"/>`;
-      s += st(40, 60, 1.2, 'twinkle t1') + st(170, 110, 1, 'twinkle t2') + st(60, 120, 0.8, 'twinkle t3');
+      const pts = (SPARKLES[species] || SPARKLES.dragon)[stage] || SPARKLES.dragon.adult;
+      const k = [1.2, 1, 0.85];
+      pts.forEach(([x, y], i) => { s += st(dir === -1 ? 200 - x : x, y, k[i], 'twinkle t' + (i + 1)); }); // del otro lado si mira para el otro lado
     }
     return s;
   }
@@ -538,7 +551,7 @@
     return `<svg class="${cls.join(' ')}" viewBox="-20 0 240 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"${hd}>` + volumeDefs(id, c) +
       `<ellipse class="shadow" cx="100" cy="191" rx="${shadowW}" ry="6" fill="#000" opacity=".16"/>` +
       `<g class="flipper"${flip}><g class="bob">${body}</g></g>` +
-      `<g class="pfx">${overlays(o.mood, flipHead(r.head, o.dir), o.variant, o.dir, o.act, o.species)}</g></svg>`;
+      `<g class="pfx">${overlays(o.mood, flipHead(r.head, o.dir), o.variant, o.dir, o.act, o.species, o.stage)}</g></svg>`;
   }
   function flipHead(h, dir) {
     if (dir !== -1) return h;
