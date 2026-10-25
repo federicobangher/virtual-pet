@@ -72,6 +72,9 @@
       for (let i = 0; i < 8; i++) tone(300 + Math.random() * 500, 0.05, { type: 'square', at: 0.1 + i * 0.12, vol: 0.12 });
     },
     song: () => seq([1568, 1760, 2093, 1760, 0, 2349, 2093, 1760, 2093], 'sine', 0.13, 0.35),
+    // 2.0: música para bailar (living) y la bocina del auto (garaje)
+    dance: () => { const b = [262, 0, 330, 392, 0, 330, 440, 392]; seq(b.concat(b), 'triangle', 0.24, 0.45); for (let i = 0; i < 16; i++) tone(110, 0.06, { type: 'square', at: i * 0.24, vol: 0.18 }); },
+    honk: () => { tone(415, 0.18, { type: 'square', vol: 0.35 }); tone(415, 0.28, { type: 'square', at: 0.24, vol: 0.35 }); },
     hide: () => { tone(500, 0.18, { type: 'triangle', to: 220, vol: 0.4 }); tone(260, 0.16, { type: 'triangle', at: 1.4, to: 620, vol: 0.4 }); },
     tongue: () => { for (let i = 0; i < 3; i++) tone(900, 0.08, { type: 'sine', at: i * 0.5, to: 1900, vol: 0.3 }); },
     voice: (sp) => {

@@ -32,8 +32,10 @@
 
   /* ============ vista de la mascota ============ */
   class PetView {
-    constructor(el) { this.el = el; this.key = ''; this.temp = null; this.tempUntil = 0; this.dir = 1; this.walking = false; this.flying = false; this.act = null; this.actUntil = 0; this.actT0 = 0; }
+    constructor(el) { this.el = el; this.key = ''; this.temp = null; this.tempUntil = 0; this.dir = 1; this.walking = false; this.flying = false; this.act = null; this.actUntil = 0; this.actT0 = 0; this.talkUntil = 0; this.tired = false; }
     setTemp(mood, ms) { this.temp = mood; this.tempUntil = Date.now() + ms; this.render(); }
+    // mueve la boca un rato (cuando dice algo en el globito)
+    talk(ms) { this.talkUntil = performance.now() + (ms || 1200); if (this.onSvg) this.onSvg(); }
     // gesto corto (estirarse, rascarse, saltito…)
     setAct(name, ms) { this.act = name; this.actUntil = Date.now() + ms; this.actT0 = performance.now(); this.render(); }
     get busy() { return !!(this.temp || (this.act && Date.now() < this.actUntil)); }
@@ -89,47 +91,10 @@
     if (kind === 'coins') make(`+${opts.n} ${coinIc()}`, 'fx-coins', 0, -10);
   }
 
-  /* ============ panel ============ */
+  /* ============ panel ============
+     Desde la 2.0 el panel es la casa (js/house.js): la crea cada modo (celular o Windows) y acá sólo se actualiza. */
   const P = {};
-  function buildPanel(root) {
-    root.innerHTML = '';
-    P.hud = h(`<div class="hud">
-        <div class="who"><span class="pname"></span><span class="chip pstage"></span></div>
-        <button class="coins" type="button" title="Tus monedas — abrir la tienda">${coinIc()}<b class="ncoins">0</b></button>
-      </div>`);
-    P.level = h(`<div class="level" hidden><span class="lvnum">Nivel 0</span><span class="bar xp" title="Puntos para el próximo nivel"><i></i></span><span class="lvnext"></span>
-      <button type="button" class="lvtip" title="Cómo sumar puntos y subir de nivel"><span class="lt-ic">${ic('star')}</span><span class="lt-tx"></span><b class="lt-xp"></b><span class="lt-more">¿Cómo subo?</span></button></div>`);
-    P.meters = h(`<div class="meters" role="list"></div>`);
-    METERS.forEach((m) => {
-      P.meters.appendChild(h(`<button type="button" class="meter m-${m.k}" role="listitem" data-k="${m.k}" title="${m.label}"><span class="mi">${ic(m.icon)}</span><span class="bar"><i></i></span><span class="ml"><span class="mn">${m.label}</span> <b class="mp">0%</b></span></button>`));
-    });
-    // Tocar una barra (o la ayuda del nivel) abre "Cómo está": porcentajes, cuánto falta y qué hacer
-    P.meters.addEventListener('click', (e) => { const b = e.target.closest('.meter'); if (b) { snd.unlock(); snd.play('tap'); openSheet('status', b.dataset.k); } });
-    P.level.querySelector('.lvtip').addEventListener('click', () => { snd.unlock(); snd.play('tap'); openSheet('status', 'level'); });
-    P.tipAt = 0; P.tipKey = '';
-    P.eggbar = h(`<div class="eggbar" hidden><div class="eggrow"><span>Calor</span><span class="bar warmth"><i></i></span></div><div class="eggrow"><span>Nacimiento</span><span class="bar hatch"><i></i></span></div></div>`);
-    P.actions = h(`<div class="actions"></div>`);
-    root.append(P.hud, P.level, P.meters, P.eggbar, P.actions);
-    P.hud.querySelector('.coins').addEventListener('click', () => openSheet('shop'));
-    P.lastActKey = '';
-  }
-
-  const ACTIONS = [
-    { id: 'food', label: 'Comer', icon: 'food', run: () => openSheet('food') },
-    { id: 'play', label: 'Jugar', icon: 'play', run: () => { const r = C.act.canPlay(); if (!r.ok) return say(r.msg, true); openSheet('games'); } },
-    { id: 'bath', label: 'Bañar', icon: 'bath', run: () => doAct(C.act.bath(), 'bath') },
-    { id: 'clean', label: 'Limpiar', icon: 'clean', run: () => { const r = C.act.clean(); if (r.ok) { snd.play('good'); host().onClean && host().onClean(); } else say(r.msg, true); } },
-    { id: 'sleep', label: 'Dormir', icon: 'sleep', run: () => { const was = C.state.pet.sleeping; const r = C.act.sleep(); if (r.ok) snd.play(was ? 'wake' : 'sleep'); say(r.msg, !r.ok); } },
-    { id: 'med', label: 'Remedio', icon: 'med', run: () => openSheet('meds') },
-    { id: 'shop', label: 'Tienda', icon: 'shop', run: () => openSheet('shop') },
-    { id: 'more', label: 'Más', icon: 'more', run: () => openSheet('more') },
-  ];
-  const EGG_ACTIONS = [
-    { id: 'warm', label: 'Dar calor', icon: 'warm', big: true, run: () => warmEgg() },
-    { id: 'shop', label: 'Tienda', icon: 'shop', run: () => openSheet('shop') },
-    { id: 'more', label: 'Más', icon: 'more', run: () => openSheet('more') },
-  ];
-
+  function buildPanel() { P.house = H.house || null; }
   function warmEgg() {
     const r = C.act.warm();
     if (r.ok) { snd.play('warm'); fx(host().petBox(), 'warm'); if (r.msg) say(r.msg); }
@@ -144,82 +109,7 @@
     return r;
   }
 
-  function updatePanel() {
-    const S = C.state, p = S.pet;
-    if (!P.hud) return;
-    setText(P.hud.querySelector('.ncoins'), S.coins);
-    setText(P.hud.querySelector('.pname'), p ? p.name : 'Virtual Pet');
-    const chip = P.hud.querySelector('.pstage');
-    setText(chip, p ? (p.dead ? 'En el cielo' : p.stage === 'egg' ? 'Huevo' : C.stageName(p.stage) + ' · ' + C.ageText(p)) : '');
-    setHidden(chip, !p);
-    const egg = p && p.stage === 'egg';
-    setHidden(P.meters, !p || egg || p.dead);
-    setHidden(P.level, !p || egg || p.dead);
-    if (p && !egg && !p.dead) {
-      const max = p.level >= C.R.maxLevel;
-      setText(P.level.querySelector('.lvnum'), 'Nivel ' + p.level);
-      setW(P.level.querySelector('.xp i'), max ? 100 : Math.min(100, Math.round((p.xp / C.xpNeed(p.level)) * 1000) / 10));
-      setText(P.level.querySelector('.lvnext'), max ? '¡Máximo!' : Math.floor(p.xp) + ' / ' + C.xpNeed(p.level) + ' pts');
-      setCls(P.level, 'max', max);
-      // consejo para sumar puntos (se recalcula cada 5 s o cuando cambia algo importante)
-      const tk = [p.level, Math.floor(p.xp), p.sleeping, p.sick, p.poops.length, p.food < 50, p.energy < 45, p.hygiene < 50, p.fun < 60, p.health < 60].join();
-      const tn = Date.now();
-      if (tk !== P.tipKey || tn - P.tipAt > 5000) {
-        P.tipKey = tk; P.tipAt = tn;
-        const tip = C.xpTip();
-        if (tip) {
-          setText(P.level.querySelector('.lt-tx'), tip.text);
-          const xe = P.level.querySelector('.lt-xp'); setText(xe, tip.xp ? '+' + tip.xp + ' pts' : ''); setHidden(xe, !tip.xp);
-          setCls(P.level.querySelector('.lvtip'), 'now', !!tip.xp);
-        }
-      }
-    }
-    setHidden(P.eggbar, !egg);
-    if (p && !egg) {
-      METERS.forEach((m) => {
-        const v = Math.round(p[m.k]);
-        const el = P.meters.querySelector('.m-' + m.k);
-        setW(el.querySelector('i'), v);
-        if (v < 25 && !el.classList.contains('low')) { el.classList.add('low'); ping(el, 3200); }
-        else if (v >= 25) setCls(el, 'low', false);
-        setText(el.querySelector('.mp'), v + '%');
-        const ti = `${m.label}: ${v}% — tocá para ver qué hacer`;
-        if (el.title !== ti) el.title = ti;
-      });
-    }
-    if (egg) {
-      setW(P.eggbar.querySelector('.warmth i'), Math.round(p.egg.warmth));
-      setW(P.eggbar.querySelector('.hatch i'), Math.min(100, Math.round(p.egg.progress)));
-    }
-    // botones
-    const list = !p || p.dead ? [] : egg ? EGG_ACTIONS : ACTIONS;
-    const key = list.map((a) => a.id).join(',');
-    if (key !== P.lastActKey) {
-      P.actions.innerHTML = '';
-      list.forEach((a) => {
-        const b = h(`<button type="button" class="act act-${a.id}${a.big ? ' big' : ''}"><span class="ai">${ic(a.icon)}</span><span class="al">${a.label}</span><span class="badge" hidden></span></button>`);
-        b.addEventListener('click', () => { snd.unlock(); snd.play('tap'); a.run(); });
-        P.actions.appendChild(b);
-      });
-      P.lastActKey = key;
-      setCls(P.actions, 'egg-actions', egg);
-    }
-    if (p && !egg && !p.dead) {
-      const sl = P.actions.querySelector('.act-sleep');
-      setText(sl.querySelector('.al'), p.sleeping ? 'Despertar' : 'Dormir');
-      setHTML(sl.querySelector('.ai'), ic(p.sleeping ? 'wake' : 'sleep'));
-      const cb = P.actions.querySelector('.act-clean .badge');
-      setHidden(cb, !p.poops.length); setText(cb, p.poops.length);
-      const mb = P.actions.querySelector('.act-med .badge');
-      setHidden(mb, !p.sick); setText(mb, '!');
-      const fb = P.actions.querySelector('.act-food .badge');
-      setHidden(fb, !(p.food < 25)); setText(fb, '!');
-      P.actions.querySelectorAll('.act').forEach((b) => {
-        const id = b.className.match(/act-(\w+)/)[1];
-        setCls(b, 'dim', p.sleeping && ['food', 'play', 'bath'].includes(id));
-      });
-    }
-  }
+  function updatePanel() { if (P.house) P.house.update(); else if (H && H.house) { P.house = H.house; P.house.update(); } }
 
   /* ============ mensajes ============ */
   function say(text, warn, ms, action) {
@@ -229,14 +119,16 @@
 
   /* ============ pedidos de la mascota ============ */
   // Qué hacer con cada pedido (el botón del globito y el ícono sobre la cabeza)
+  // (cada pedido te lleva al ambiente de la casa donde se resuelve: comida → cocina, dormir → dormitorio…)
+  const goRoom = (r) => { const hs = host().house; if (hs && hs.go) hs.go(r, 1); };
   const NEED_ACTIONS = {
-    food: { label: 'Dar de comer', icon: 'food', run: () => openSheet('food') },
-    energy: { label: 'A dormir', icon: 'sleep', run: () => { const r = C.act.sleep(); if (r.ok) snd.play('sleep'); say(r.msg, !r.ok); } },
-    fun: { label: 'Jugar', icon: 'play', run: () => { const r = C.act.canPlay(); if (!r.ok) return say(r.msg, true); openSheet('games'); } },
-    hygiene: { label: 'Bañar', icon: 'bath', run: () => doAct(C.act.bath(), 'bath') },
+    food: { label: 'Dar de comer', icon: 'food', run: () => { goRoom('cocina'); openSheet('fridge'); } },
+    energy: { label: 'A dormir', icon: 'sleep', run: () => { goRoom('dormitorio'); const r = C.act.sleep(); if (r.ok) snd.play('sleep'); say(r.msg, !r.ok); } },
+    fun: { label: 'Jugar', icon: 'play', run: () => { const r = C.act.canPlay(); if (!r.ok) return say(r.msg, true); goRoom('juegos'); openSheet('games'); } },
+    hygiene: { label: 'Bañar', icon: 'bath', run: () => { goRoom('bano'); const hs = host().house; if (hs && hs.shower) hs.shower(); else doAct(C.act.bath(), 'bath'); } },
     poop: { label: 'Limpiar', icon: 'clean', run: () => { const r = C.act.clean(); if (r.ok) { snd.play('good'); host().onClean && host().onClean(); } } },
-    sick: { label: 'Dar remedio', icon: 'med', run: () => openSheet('meds') },
-    health: { label: 'Dar vitaminas', icon: 'med', run: () => openSheet('meds') },
+    sick: { label: 'Dar remedio', icon: 'med', run: () => { goRoom('laboratorio'); openSheet('shelf'); } },
+    health: { label: 'Dar vitaminas', icon: 'med', run: () => { goRoom('laboratorio'); openSheet('shelf'); } },
   };
   const askLevel = {};
   let lastAsk = 0, needEl = null, needShown = '';
@@ -248,7 +140,6 @@
     say(need.text, need.level === 2, 7000, action);
     snd.play(need.level === 2 ? 'alert' : 'voice', p.species);
     if (needEl && !needEl.hidden) ping(needEl, need.level === 2 ? 4000 : 4500);
-    if (P.meters) P.meters.querySelectorAll('.meter.low').forEach((m) => ping(m, 3200));
     host().onAsk && host().onAsk(need, action);
     if (need.level === 2) notify(need);
   }
@@ -257,6 +148,7 @@
     const box = host().petBox();
     if (!box) return;
     if (!needEl || !box.contains(needEl)) {
+      if (needEl) needEl.remove(); // (la caja cambió: en Windows, al entrar o salir de la casa)
       needEl = h(`<button type="button" class="needicon" hidden aria-label="Lo que necesita"></button>`);
       needEl.addEventListener('click', (e) => { e.stopPropagation(); const a = NEED_ACTIONS[needEl.dataset.need]; if (a) { snd.unlock(); snd.play('tap'); a.run(); } });
       box.appendChild(needEl);
@@ -427,7 +319,7 @@
   /* Fondos del cuarto: tarjetas con miniatura. Sólo en el modo cuarto (celular / navegador). */
   function bgGrid() {
     const S = C.state;
-    return '<div class="bg-grid">' + Object.keys(C.BACKGROUNDS).map((id) => {
+    return '<div class="bg-grid">' + Object.keys(C.BACKGROUNDS).filter((id) => !C.BACKGROUNDS[id].hidden).map((id) => {
       const b = C.BACKGROUNDS[id], mine = S.bgOwned[id], on = S.bg === id;
       const btn = on ? '<button type="button" class="btn" disabled>En uso</button>'
         : mine ? `<button type="button" class="btn primary" data-bg="${id}">Usar</button>`
@@ -450,13 +342,20 @@
   }
 
   /* ============ minijuegos: catálogo ============ */
+  const emo = (e) => `<span class="gc-emo">${esc(e)}</span>`;
   const GAME_INFO = {
-    catch: { art: () => art.itemSVG('fruit'), desc: 'Mové la canasta y atrapá todo lo rico. ¡Cuidado con las piedras!' },
-    guess: { art: () => ic('back') + ic('back', 'flipx'), desc: 'Adiviná hacia qué lado va a mirar. 5 rondas.' },
-    memory: { art: () => art.itemSVG('cake'), desc: 'Dá vuelta las cartas y encontrá los pares de comida.' },
-    bubbles: { art: () => ic('bath'), desc: 'Reventá todas las burbujas que puedas. Las doradas valen más.' },
-    simon: { art: () => ic('music'), desc: 'Mirá el orden en que se prenden los colores y repetilo. ¡Cada vez es más largo!' },
-    jump: { art: () => ic('jump'), desc: 'Tu mascota corre: tocá la pantalla para saltar las piedras.' },
+    catch: { art: () => emo('🍎🧺'), desc: 'Mové la canasta y atrapá todo lo rico. ¡Cuidado con las piedras!' },
+    guess: { art: () => emo('👀'), desc: 'Adiviná hacia qué lado va a mirar. 5 rondas.' },
+    memory: { art: () => emo('🃏'), desc: 'Dá vuelta las cartas y encontrá los pares de comida.' },
+    bubbles: { art: () => emo('🎈'), desc: 'Reventá todas las burbujas que puedas. Las doradas valen más.' },
+    gol: { art: () => emo('⚽🥅'), desc: 'Patealo al arco: elegí la esquina y que no te ataje.' },
+    tateti: { art: () => emo('❌⭕'), desc: 'Tres en línea contra tu mascota. ¿Le ganás?' },
+    simon: { art: () => emo('🎵'), desc: 'Mirá el orden en que se prenden los colores y repetilo. ¡Cada vez es más largo!' },
+    topos: { art: () => emo('🐹🔨'), desc: 'Tocá a los topos que asoman. ¡No a tu mascota!' },
+    pileta: { art: () => emo('🏊'), desc: 'Saltá de flotador en flotador sin caerte al agua.' },
+    carrera: { art: () => emo('🏎️'), desc: 'Manejá el auto y esquivá los conos. Más lejos, más puntos.' },
+    jump: { art: () => emo('🏃'), desc: 'Tu mascota corre: tocá la pantalla para saltar las piedras.' },
+    nubes: { art: () => emo('☁️'), desc: 'Saltá de nube en nube lo más alto que puedas.' },
   };
   const gameLocked = (id) => !!(C.GAMES[id] && C.GAMES[id].price && !C.state.gamesOwned[id]);
   function gameCard(id, inShop) {
@@ -467,7 +366,7 @@
   }
   function gamesShopHTML() {
     const ids = Object.keys(C.GAMES).filter((id) => C.GAMES[id].price);
-    return '<div class="games">' + ids.map((id) => gameCard(id, true)).join('') + '</div>';
+    return '<div class="games grid">' + ids.map((id) => gameCard(id, true)).join('') + '</div>';
   }
   function unlockGame(id, after) {
     const g = C.GAMES[id];
@@ -580,6 +479,27 @@
   }
 
   const scroller = (n) => n.closest('.sheet-body') || n.closest('.dcard-body');
+  const foodName = (id, sp) => (id === 'fav' ? C.SPECIES[sp].fav : C.ITEMS[id].name);
+  const ROOM_IC = { cocina: 'fridge', bano: 'shower', dormitorio: 'lampOn', living: 'tv', juegos: 'controller', laboratorio: 'shelf', jardin: 'seeds', patio: 'soccer', paseo: 'places', garaje: 'wheel' };
+  // Tarjeta de un objeto: mode 'buy' (precio), 'use' (cantidad), 'wear' (poner/quitar), 'plant' (plantar)
+  function itemCard(id, mode) {
+    const it = C.ITEMS[id], S = C.state, sp = S.pet ? S.pet.species : 'dragon';
+    const qty = S.inv[id] || 0, name = foodName(id, sp);
+    let foot = '', attr = '';
+    if (mode === 'buy') { attr = `data-buy="${id}"`; foot = `<span class="c-price${S.coins < it.price ? ' poor' : ''}">${it.price}${coinIc()}</span>`; }
+    if (mode === 'use') { attr = `data-use="${id}"`; foot = '<span class="c-go">Usar</span>'; }
+    if (mode === 'plant') { attr = `data-plant="${id}"`; foot = '<span class="c-go">Plantar</span>'; }
+    if (mode === 'wear') { attr = `data-wear="${id}"`; foot = `<span class="c-go${S.wearing === id ? ' on' : ''}">${S.wearing === id ? 'Quitar' : 'Poner'}</span>`; }
+    const q = it.kind === 'wear' ? (S.owned[id] ? '<span class="c-qty">Tuyo</span>' : '') : qty ? `<span class="c-qty">x${qty}</span>` : '';
+    return `<button type="button" class="card c-${it.kind}${S.wearing === id ? ' on' : ''}" ${attr}><span class="c-art">${art.itemSVG(id, sp)}</span>${q}<b class="c-name">${esc(name)}</b><small class="c-desc">${esc(it.desc)}</small>${foot}</button>`;
+  }
+  function buyOne(id) {
+    const it = C.ITEMS[id];
+    if (C.state.coins < it.price) { snd.play('bad'); say(`Te faltan ${it.price - C.state.coins} monedas`, true, 2200); return false; }
+    const r = C.act.buy(id, 1);
+    if (r.ok) { snd.play('coin'); if (it.kind === 'wear') host().view().setTemp('happy', 1500); } else { snd.play('bad'); say(r.msg, true); }
+    return r.ok;
+  }
   // "Instalar el juego" (sólo en la página web): botón si el navegador lo permite, si no, cómo hacerlo a mano
   function installHTML() {
     const st = plat.install && plat.install.state();
@@ -617,39 +537,138 @@
       if (focus) setTimeout(() => { const el = node.querySelector('.focus'), box = scroller(node); if (el && box) { const head = box.querySelector('.dsheet-head'); box.scrollTop += el.getBoundingClientRect().top - box.getBoundingClientRect().top - (head ? head.offsetHeight : 0) - 8; } }, 30);
       return { title: 'Cómo está y qué hacer', node, refresh: () => render(false) };
     },
-    food() {
-      const node = h('<div class="list"></div>');
-      const render = () => { setHTML(node, ['fruit', 'fav', 'cake'].map((id) => itemRow(id, 'use')).join('')); };
-      render(); bindItems(node, render);
-      return { title: '¿Qué le das de comer?', node, refresh: render };
-    },
-    meds() {
-      const node = h('<div class="list"></div>');
+    // Heladera: todo lo que tenés para comer. Tocá una comida y se la das.
+    fridge() {
+      const node = h('<div class="cards fridge"></div>');
       const render = () => {
-        const p = C.state.pet;
-        setHTML(node, (p && p.sick ? '<p class="note warn">Está enfermo: dale el remedio.</p>' : '<p class="note">El remedio sólo sirve si está enfermo. Las vitaminas recuperan salud.</p>') +
-          ['medicine', 'vitamins'].map((id) => itemRow(id, 'use')).join(''));
+        const S = C.state, sp = S.pet ? S.pet.species : 'dragon';
+        const list = C.FOOD_IDS.filter((id) => (S.inv[id] || 0) > 0);
+        setHTML(node, (list.length ? '' : '<p class="note">La heladera está vacía. Comprá comida en la tienda (o cosechá en el jardín).</p>') +
+          list.map((id) => `<button type="button" class="card c-food" data-use="${id}" title="${esc(foodName(id, sp))}"><span class="c-art">${art.itemSVG(id, sp)}</span><span class="c-qty">x${S.inv[id]}</span><b class="c-name">${esc(foodName(id, sp))}</b></button>`).join('') +
+          `<button type="button" class="card c-add" data-shop="comida"><span class="c-art">${N.houseArt ? N.houseArt.icon('plus') : '+'}</span><b class="c-name">Comprar</b></button>`);
       };
-      render(); bindItems(node, render);
-      return { title: 'Botiquín', node, refresh: render };
+      render();
+      node.addEventListener('click', (e) => {
+        const b = e.target.closest('button'); if (!b) return;
+        snd.unlock();
+        if (b.dataset.shop) { snd.play('tap'); openSheet('shop', b.dataset.shop); return; }
+        const id = b.dataset.use; if (!id) return;
+        const hs = host().house;
+        closeSheet();
+        if (hs && hs.feed) { hs.selectFood && hs.selectFood(id); hs.feed(id); } else doAct(C.act.feed(id), 'eat', id);
+      });
+      return { title: 'Heladera', node, refresh: render };
     },
-    shop() {
-      const node = h('<div class="list"></div>');
+    // Estante del laboratorio: remedios, vitaminas y pociones
+    shelf() {
+      const node = h('<div class="cards"></div>');
       const render = () => {
-        setHTML(node, `<p class="note">Tenés <b>${C.state.coins}</b>${coinIc()} — ganás más jugando y entrando todos los días.</p>` +
-          '<h4>Comida</h4>' + ['fruit', 'fav', 'cake'].map((id) => itemRow(id, 'shop')).join('') +
-          '<h4>Salud</h4>' + ['medicine', 'vitamins'].map((id) => itemRow(id, 'shop')).join('') +
-          packsHTML() +
-          '<h4>Accesorios</h4>' + C.WEAR.map((id) => itemRow(id, 'shop')).join('') +
-          (host().kind === 'room' ? `<h4>${ic('image')} Fondos</h4>` + bgGrid() : '') +
-          `<h4>${ic('play')} Minijuegos</h4>` + gamesShopHTML());
+        const S = C.state, p = S.pet;
+        setHTML(node, (p && p.sick ? '<p class="note warn">Está enfermo: dale el remedio.</p>' : '<p class="note">El remedio sólo sirve si está enfermo. Las pociones ayudan cuando le falta algo.</p>') +
+          C.MEDS.map((id) => itemCard(id, (S.inv[id] || 0) > 0 ? 'use' : 'buy')).join(''));
       };
-      render(); bindItems(node, render); bindBg(node, render); bindPacks(node, render); bindGameBuy(node, render);
+      render();
+      node.addEventListener('click', (e) => {
+        const b = e.target.closest('button'); if (!b) return;
+        snd.unlock();
+        if (b.dataset.buy) { buyOne(b.dataset.buy); render(); return; }
+        const id = b.dataset.use; if (!id) return;
+        const hs = host().house;
+        const r = hs && hs.medicate ? (hs.medicate(id), { ok: true }) : doAct(C.act.medicate(id), 'heal');
+        if (r.ok) closeSheet();
+      });
+      return { title: 'Estante de pociones', node, refresh: render };
+    },
+    // Armario: accesorios (los tuyos se ponen y se sacan; los demás se compran)
+    wardrobe() {
+      const node = h('<div class="cards"></div>');
+      const render = () => setHTML(node, `<p class="note">Tocá un accesorio para ponérselo o sacárselo.</p>` + C.WEAR.map((id) => itemCard(id, C.state.owned[id] ? 'wear' : 'buy')).join(''));
+      render();
+      node.addEventListener('click', (e) => {
+        const b = e.target.closest('button'); if (!b) return;
+        snd.unlock();
+        if (b.dataset.buy) buyOne(b.dataset.buy);
+        else if (b.dataset.wear) { C.act.wear(b.dataset.wear); snd.play('tap'); const v = host().view(); if (C.state.wearing) v.setTemp('happy', 1500); }
+        render();
+      });
+      return { title: 'Armario', node, refresh: render };
+    },
+    // Semillas para la huerta (si se abrió tocando un cantero vacío, se planta ahí)
+    seeds(plot) {
+      const node = h('<div class="cards"></div>');
+      const render = () => {
+        const S = C.state;
+        setHTML(node, `<p class="note">Plantá una semilla en un cantero vacío y regá con la nube: crece mientras la tierra está mojada (3 horas por riego).</p>` +
+          Object.keys(C.SEEDS).map((id) => itemCard(id, (S.inv[id] || 0) > 0 ? 'plant' : 'buy')).join(''));
+      };
+      render();
+      node.addEventListener('click', (e) => {
+        const b = e.target.closest('button'); if (!b) return;
+        snd.unlock();
+        if (b.dataset.buy) { buyOne(b.dataset.buy); render(); return; }
+        const id = b.dataset.plant; if (!id) return;
+        const hs = host().house;
+        closeSheet();
+        if (hs && hs.go) hs.go('jardin', 1);
+        const free = C.state.garden.plots.findIndex((x) => !x);
+        const at = plot != null && !C.state.garden.plots[plot] ? plot : free;
+        if (at < 0) { say('No hay canteros libres: cosechá primero', true); return; }
+        if (hs && hs.plantAt) hs.plantAt(at, id); else C.act.plant(at, id);
+        if (hs && (C.state.inv[id] || 0) > 0) { hs.seedSel = id; }
+      });
+      return { title: 'Semillas', node, refresh: render };
+    },
+    // Lugares para pasear
+    places() {
+      const node = h('<div class="places"></div>');
+      const render = () => setHTML(node, `<p class="note">Elegí a dónde salir a pasear. Los lugares nuevos se compran con monedas.</p>` + bgGrid());
+      render(); bindBg(node, () => { render(); const hs = host().house; if (hs && hs.go) hs.go('paseo', 1); });
+      return { title: 'Lugares', node, refresh: render };
+    },
+    // Todos los ambientes de la casa
+    rooms() {
+      const node = h('<div class="cards rooms"></div>');
+      const render = () => setHTML(node, C.ROOMS.map((id) => {
+        const R = N.houseArt.ROOMS[id], cur = host().house && host().house.room() === id;
+        return `<button type="button" class="card c-room${cur ? ' on' : ''}" data-room="${id}" style="--rc:${R.wall || R.floor}"><span class="c-art">${N.houseArt.icon(ROOM_IC[id])}</span><b class="c-name">${esc(R.name)}</b></button>`;
+      }).join(''));
+      render();
+      node.addEventListener('click', (e) => { const b = e.target.closest('[data-room]'); if (!b) return; snd.unlock(); closeSheet(); const hs = host().house; if (hs) hs.go(b.dataset.room, 1); });
+      return { title: 'Ambientes', node, refresh: render };
+    },
+    // Tienda con pestañas: comida, salud, huerta, ropa, lugares, juegos y (en Android) monedas
+    shop(tab0) {
+      const node = h('<div class="shop"><div class="tabs" role="tablist"></div><div class="shop-body"></div></div>');
+      const tabsEl = node.querySelector('.tabs'), body = node.querySelector('.shop-body');
+      const TABS = [['comida', 'Comida', 'food'], ['salud', 'Salud', 'med'], ['huerta', 'Huerta', 'leaf'], ['ropa', 'Ropa', 'shirt'], ['lugares', 'Lugares', 'image'], ['juegos', 'Juegos', 'play']];
+      let tab = TABS.some((t) => t[0] === tab0) ? tab0 : 'comida';
+      const render = () => {
+        const S = C.state;
+        const tabs = TABS.concat(BL().enabled ? [['monedas', 'Monedas', 'gift']] : []);
+        setHTML(tabsEl, tabs.map(([k, l, i]) => `<button type="button" class="tab${k === tab ? ' on' : ''}" data-tab="${k}" role="tab" aria-selected="${k === tab}">${ic(i)}<span>${l}</span></button>`).join(''));
+        let html = `<p class="note shop-coins">Tenés <b>${S.coins}</b>${coinIc()} — ganás más jugando y entrando todos los días.</p>`;
+        if (tab === 'comida') html += Object.keys(C.FOOD_CATS).map((cat) => `<h4>${esc(C.FOOD_CATS[cat])}</h4><div class="cards">` + C.FOOD_IDS.filter((id) => C.ITEMS[id].cat === cat).map((id) => itemCard(id, 'buy')).join('') + '</div>').join('');
+        else if (tab === 'salud') html += '<div class="cards">' + C.MEDS.map((id) => itemCard(id, 'buy')).join('') + '</div>';
+        else if (tab === 'huerta') html += '<p class="note">Las semillas se plantan en el jardín. Las regás con la nube y en unas horas cosechás comida para la heladera.</p><div class="cards">' + Object.keys(C.SEEDS).map((id) => itemCard(id, 'buy')).join('') + '</div>';
+        else if (tab === 'ropa') html += '<div class="cards">' + C.WEAR.map((id) => itemCard(id, S.owned[id] ? 'wear' : 'buy')).join('') + '</div>';
+        else if (tab === 'lugares') html += bgGrid();
+        else if (tab === 'juegos') html += gamesShopHTML();
+        else if (tab === 'monedas') html += packsHTML();
+        setHTML(body, html);
+      };
+      render();
+      tabsEl.addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (!b) return; snd.unlock(); snd.play('tap'); tab = b.dataset.tab; render(); const sc = scroller(node); if (sc) sc.scrollTop = 0; });
+      body.addEventListener('click', (e) => {
+        const b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.buy) { snd.unlock(); buyOne(b.dataset.buy); render(); }
+        else if (b.dataset.wear) { snd.unlock(); C.act.wear(b.dataset.wear); snd.play('tap'); render(); }
+      });
+      bindBg(body, render); bindPacks(body, render); bindGameBuy(body, render);
       const off = onBilling(render);
       return { title: 'Tienda', node, refresh: render, onClose: off };
     },
     games() {
-      const node = h('<div class="games"></div>');
+      const node = h('<div class="games grid"></div>');
       const render = () => setHTML(node, Object.keys(C.GAMES).map((id) => gameCard(id)).join(''));
       render();
       node.addEventListener('click', (e) => {
@@ -667,14 +686,13 @@
       const render = () => {
         const S = C.state, st = S.settings, p = S.pet;
         const owned = Object.keys(S.owned);
-        const achList = C.ACHIEVEMENTS.filter((a) => S.achievements[a.id] || !(desk && a.roomOnly));
+        const achList = C.ACHIEVEMENTS;
         const nAch = achList.filter((a) => S.achievements[a.id]).length, totAch = achList.length;
         setHTML(node, `
           ${installHTML()}
           <section class="row more-top"><button type="button" class="btn" data-open="achievements">${ic('star')} Logros <span class="cnt">${nAch}/${totAch}</span></button><button type="button" class="btn" data-open="album">${ic('book')} Álbum <span class="cnt">${S.album.length}</span></button></section>
           ${p && !p.dead ? `<section><h4>${ic('pencil')} Nombre</h4><form class="rename"><input id="rename" maxlength="16" value="${esc(p.name)}" aria-label="Nombre de la mascota"><button class="btn" type="submit">Cambiar</button></form></section>` : ''}
-          ${desk ? '' : `<section class="bg-sec"><h4>${ic('image')} Fondo del cuarto</h4>${bgGrid()}</section>`}
-          <section><h4>${ic('shirt')} Accesorios</h4>${owned.length ? '<div class="list">' + owned.map((id) => itemRow(id, 'shop')).join('') + '</div>' : '<p class="note">Todavía no compraste accesorios. Están en la tienda.</p>'}</section>
+          <section class="row more-top"><button type="button" class="btn" data-open="wardrobe">${ic('shirt')} Armario <span class="cnt">${owned.length}/${C.WEAR.length}</span></button><button type="button" class="btn" data-open="rooms">${ic('pin')} Ambientes</button></section>
           <section><h4>${ic('gear')} Ajustes</h4>
             ${toggle('sound', 'Sonido', st.sound)}
             ${toggle('notify', desk ? 'Avisos de Windows cuando necesita algo' : plat.canSchedule ? 'Avisos cuando necesita algo (aunque la app esté cerrada)' : 'Avisos cuando necesita algo', st.notify)}
@@ -776,11 +794,12 @@
       doneMsg(true);
     } catch (e) { doneMsg(false); }
   }
+  SHEETS.food = SHEETS.fridge; SHEETS.meds = SHEETS.shelf;
   SHEETS.achievements = function () {
     const node = h('<div class="ach-list"></div>');
     const render = () => {
       const got = C.state.achievements;
-      const list = C.ACHIEVEMENTS.filter((a) => got[a.id] || !(a.roomOnly && host().kind === 'desktop'));
+      const list = C.ACHIEVEMENTS;
       setHTML(node, `<p class="note">${list.filter((a) => got[a.id]).length} de ${list.length} logros. Cada logro da monedas.</p>` +
         list.map((a) => `<div class="ach ${got[a.id] ? 'on' : ''}"><span class="ach-ic">${ic(got[a.id] ? 'star' : 'help')}</span><span class="ach-txt"><b>${esc(a.name)}</b><small>${esc(a.desc)}</small></span><span class="ach-prize">${got[a.id] ? new Date(got[a.id]).toLocaleDateString() : '+' + a.coins + coinIc()}</span></div>`).join(''));
     };
@@ -806,7 +825,14 @@
   // Ahorro de batería: a mano, o solo cuando el celular tiene poca batería
   function saverOn() { const S = C.state; return !!(S && (S.settings.saver || (N.platform && N.platform.lowBattery))); }
   function ageOf(ms) { return C.ageText({ age: ms || 0 }); }
-  const HELP = `<p>Tu mascota tiene cinco necesidades que bajan con el tiempo, aunque cierres el juego: <b>comida, energía, diversión, higiene y salud</b>.</p>
+  const HELP = `<p><b>La casa:</b> arriba están tus monedas, las cinco necesidades (se llenan de verde a rojo; tocalas para ver qué hacer) y el nivel. Con las flechas al lado del nombre (o deslizando el dedo) pasás de un ambiente a otro; tocando el nombre los ves todos. Abajo hay tres botones que cambian en cada ambiente.</p>
+    <ul class="help-rooms"><li><b>Cocina:</b> elegí la comida con las flechas y tocala o arrastrala hasta la boca. En la heladera está todo lo que tenés.</li>
+    <li><b>Baño:</b> pasale el jabón por encima y después la ducha.</li><li><b>Dormitorio:</b> apagá la luz para que duerma; en el armario están los accesorios.</li>
+    <li><b>Living:</b> música para bailar, la tele (tocala) y el álbum de fotos.</li><li><b>Cuarto de juegos:</b> la pelota y todos los minijuegos.</li>
+    <li><b>Laboratorio:</b> remedio, vitaminas y pociones.</li><li><b>Jardín:</b> plantá semillas, regá con la nube y cosechá comida.</li>
+    <li><b>Patio:</b> pateá penales: tu mascota ataja. <b>Paseo:</b> salí a pasear por los lugares que tengas. <b>Garaje:</b> manejá el auto.</li></ul>
+    <p>Tu mascota te sigue con la mirada: mové el dedo (o el mouse) cerca y fijate.</p>
+    <p>Tu mascota tiene cinco necesidades que bajan con el tiempo, aunque cierres el juego: <b>comida, energía, diversión, higiene y salud</b>.</p>
     <p>Si la descuidás se enferma. Si se enferma y no le das el remedio, o pasa mucho tiempo sin comer, la salud baja. <b>Si la salud llega a cero, se muere</b> (sin ningún cuidado, tarda alrededor de una semana) y podés empezar enseguida con un huevo nuevo.</p>
     <p>Tiene <b>niveles del 0 al 100</b>. Sube de nivel cuando la cuidás y lo necesitaba (darle de comer cuando tiene hambre, bañarla cuando está sucia, jugar cuando se aburre, limpiar, dejarla dormir cuando está cansada) y con el tiempo, si está bien atendida. Cada nivel da monedas, y cada 10 niveles hay un premio grande.</p>
     <p>Crece de <b>bebé</b> a <b>joven</b> en el nivel 5 y a <b>adulto</b> en el nivel 20. Si la cuidaste muy bien, de adulta tiene una <b>forma brillante</b>.</p>
@@ -814,7 +840,7 @@
     <p>Cada especie tiene su personalidad: el <b>dragón</b> es comilón, el <b>pájaro</b> se aburre rápido, el <b>lagarto</b> es dormilón y la <b>tortuga</b> es paciente y casi no se enferma.</p>
     <p>Sigue el horario real: <b>de noche</b> se cansa más rápido y te pide dormir. Si nadie la atiende, se duerme sola, y a la mañana se despierta. Durmiendo gasta mucho menos. Limpiá la caca seguido, que la enferma.</p>
     <p>Si necesita algo urgente, te viene a buscar. Cuando está tranquila bosteza, se estira, se rasca y persigue mariposas.</p>
-    <p>En <b>Más</b> están los <b>logros</b>, el <b>álbum</b> de fotos y la <b>copia de seguridad</b> de la partida.</p>
+    <p>En el menú (las tres rayitas, arriba a la derecha) están los <b>logros</b>, el <b>álbum</b>, los <b>ajustes</b> y la <b>copia de seguridad</b> de la partida. Con la cámara le sacás una foto.</p>
     <p>Entrá todos los días para cobrar el <b>premio diario</b>: cuantos más días seguidos, más monedas.</p>`;
 
   /* ============ minijuegos ============ */
@@ -990,6 +1016,18 @@
     return { node };
   }
 
+  // Novedades de la 2.0 (una sola vez, en partidas que vienen de la versión 1)
+  function newsModal() {
+    if (C.state.news !== 2) return null;
+    const node = h(`<div class="modal whatsnew"><span class="big-ic">${ic('gift')}</span><h2>¡Virtual Pet 2.0!</h2>
+      <p class="sub">Tu mascota ahora tiene una <b>casa</b> con cocina, baño, dormitorio, living, cuarto de juegos, laboratorio, jardín, patio, paseo y garaje.</p>
+      <ul class="news"><li>Más de 60 comidas y una heladera para guardarlas.</li><li>Huerta: plantá, regá con la nube y cosechá.</li><li>6 minijuegos nuevos, pociones y accesorios nuevos.</li><li>Te sigue con los ojos, habla, baila, se sacude y mucho más.</li></ul>
+      <p class="bonus">Regalo de bienvenida: banana, pizza, helado, zanahorias, leche y semillas.</p>
+      <button type="button" class="btn primary big" data-ok>¡A explorar!</button></div>`);
+    snd.play('happy');
+    return { node, onOk: () => { C.act.seenNews(); return true; } };
+  }
+
   /* ============ flujo ============ */
   let flowShown = null;
   function flow() {
@@ -997,6 +1035,7 @@
     const S = C.state;
     if (S.pet && S.pet.dead) { pushModal(deathModal); return; }
     if (!S.pet) { pushModal(C.isLocked() ? lockedModal : adoptModal); return; }
+    if (S.news === 2) { pushModal(newsModal); return; }
     flowShown = null;
   }
 
@@ -1181,6 +1220,11 @@
     let exitHintT = 0;
     plat.onBackExitHint = () => { const t = Date.now(); if (t - exitHintT > 3000) { exitHintT = t; say('Tocá "atrás" otra vez para salir', false, 2200); } };
     if (N.billing) N.billing.init();
+    // APK directo: pedir permiso para los avisos una sola vez (Android 13 o más nuevo lo pide aparte)
+    if (plat.shell && C.state.settings.notify) {
+      let asked = false; try { asked = !!localStorage.getItem('vpet.permisoAvisos'); } catch (e) { /* nada */ }
+      if (!asked) setTimeout(() => { try { localStorage.setItem('vpet.permisoAvisos', '1'); } catch (e) { /* nada */ } if (C.state.pet && !modalOpen) plat.askNotifyPermission(); }, 6000);
+    }
     // Si el navegador permite instalar el juego, ofrecerlo una vez cada 3 días (también está siempre en Más)
     if (plat.install) plat.install.onChange(() => {
       refreshSheet();
@@ -1205,5 +1249,5 @@
     });
   }
 
-  N.ui = { start, doIdle: (a) => doIdle(a), PetView, liveView, fx, say, openSheet, closeSheet, h, esc, ic, coinIc, warmEgg, doAct, pushModal, flow, saverOn, scheduleAway, get modalOpen() { return modalOpen; }, get sheetOpen() { return sheetName; } };
+  N.ui = { start, doIdle: (a) => doIdle(a), PetView, liveView, fx, say, openSheet, closeSheet, h, esc, ic, coinIc, warmEgg, doAct, pushModal, flow, saverOn, scheduleAway, startGame, gameLocked, unlockGame, special: () => special(), get modalOpen() { return modalOpen; }, get sheetOpen() { return sheetName; } };
 })();

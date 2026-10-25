@@ -3,16 +3,20 @@
    - 'android': app nativa de Android (Capacitor), la que va a Play Store. Tiene avisos programados,
                 botón "atrás" nativo y compras con Google Play.
    - 'web':     navegador o app instalada desde la página (PWA).
+   2.0: el APK para instalar directo (codigo/movil/apk) también es 'android', pero sin Capacitor: habla con
+   Android por window.AndroidPet (avisos programados, botón atrás, guardar copias). Ahí no hay compras de Google.
    El resto del juego no pregunta "¿estoy en Android?": usa N.platform. */
 (function () {
   'use strict';
   const N = (window.N = window.N || {});
   const cap = window.Capacitor;
-  const native = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
-  const P = (native && cap.Plugins) || {};
-  const kind = window.petDesktop ? 'desktop' : native ? cap.getPlatform() : 'web'; // 'android' | 'ios' | 'web' | 'desktop'
+  const AP = window.AndroidPet || null; // el APK directo
+  const capNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
+  const native = capNative || !!AP;
+  const P = (capNative && cap.Plugins) || {};
+  const kind = window.petDesktop ? 'desktop' : AP ? 'android' : native ? cap.getPlatform() : 'web'; // 'android' | 'ios' | 'web' | 'desktop'
 
-  const plat = { kind, native };
+  const plat = { kind, native, shell: !!AP };
 
   /* ---------- botón "atrás" (Android) ----------
      Antes, en el celular, tocar "atrás" con la tienda abierta cerraba el juego entero.
@@ -23,7 +27,11 @@
   let guard = false, layersOpen = () => false;
   plat.setLayersQuery = (fn) => { layersOpen = fn; };
   plat.onBackExitHint = null; // (la interfaz pone acá un aviso "tocá atrás otra vez para salir")
-  if (native && P.App && P.App.addListener) {
+  if (AP) {
+    // Android avisa el "atrás" y el juego contesta si lo usó (true) o si la app tiene que pasar a segundo plano
+    window.__vpetBack = () => { if (handleBack()) return true; return false; };
+    plat.layerChanged = () => {};
+  } else if (native && P.App && P.App.addListener) {
     P.App.addListener('backButton', () => {
       if (handleBack()) return;
       if (P.App.minimizeApp) P.App.minimizeApp(); else if (P.App.exitApp) P.App.exitApp();
@@ -54,6 +62,7 @@
   const setActive = (v) => { if (v === active) return; active = v; lifeHandlers.forEach((fn) => { try { fn(v); } catch (e) { console.error(e); } }); };
   document.addEventListener('visibilitychange', () => setActive(!document.hidden));
   if (native && P.App && P.App.addListener) P.App.addListener('appStateChange', (s) => setActive(!!s.isActive));
+  if (AP) window.__vpetLife = (v) => setActive(!!v && !document.hidden);
   window.addEventListener('pagehide', () => setActive(false));
   window.addEventListener('pageshow', () => setActive(!document.hidden)); // vuelve de la caché del navegador
 
@@ -99,7 +108,7 @@
      juego mientras está cerrado. En la app de Android se dejan programados al salir (con la hora en que
      la mascota va a empezar a pedir cada cosa) y se borran al volver. */
   const LN = P.LocalNotifications;
-  plat.canSchedule = !!(native && LN);
+  plat.canSchedule = !!(native && LN) || !!AP;
   let channelOk = false;
   async function ensureChannel() {
     if (channelOk || !LN.createChannel) return;
@@ -107,6 +116,7 @@
     channelOk = true;
   }
   plat.askNotifyPermission = async () => {
+    if (AP) { try { if (!AP.canNotify()) AP.askPermission(); return AP.canNotify(); } catch (e) { return false; } }
     if (!plat.canSchedule) return false;
     try {
       let p = await LN.checkPermissions();
@@ -115,11 +125,15 @@
     } catch (e) { return false; }
   };
   plat.cancelScheduled = async () => {
+    if (AP) { try { AP.cancelAll(); } catch (e) { /* nada */ } return; }
     if (!plat.canSchedule) return;
     try { const p = await LN.getPending(); if (p && p.notifications && p.notifications.length) await LN.cancel({ notifications: p.notifications.map((n) => ({ id: n.id })) }); } catch (e) { /* nada */ }
   };
   // items: [{ at: ms, title, body }]
   plat.schedule = async (items) => {
+    if (AP) {
+      try { if (!AP.canNotify()) return false; return AP.schedule(JSON.stringify(items.slice(0, 8).map((n) => ({ at: +n.at, title: String(n.title), body: String(n.body) })))); } catch (e) { return false; }
+    }
     if (!plat.canSchedule) return false;
     await plat.cancelScheduled();
     if (!items.length) return true;
@@ -138,6 +152,7 @@
   };
   // al tocar un aviso, la app se abre: no hace falta nada más
   plat.haptic = (kind2) => {
+    if (AP) { try { AP.vibrate(kind2 === 'heavy' ? 40 : 15); } catch (e) { /* nada */ } return; }
     if (!native || !P.Haptics) return;
     try { P.Haptics.impact({ style: kind2 === 'heavy' ? 'HEAVY' : 'LIGHT' }); } catch (e) { /* sin vibración */ }
   };

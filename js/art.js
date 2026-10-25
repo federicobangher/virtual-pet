@@ -44,7 +44,7 @@
     let out = '';
 
     // mejillas
-    const ck = mood === 'sick' ? 'fill="#9bd36a" opacity=".6"' : 'fill="url(#__ID__k)"';
+    const ck = mood === 'sick' ? 'fill="#9bd36a" opacity=".6"' : mood === 'spicy' ? 'fill="#ff3b2f" opacity=".75"' : 'fill="url(#__ID__k)"';
     out += `<ellipse class="cheek" cx="${f(eyes[0] - r * 0.12)}" cy="${f(ey + r * 0.3)}" rx="${f(r * 0.17)}" ry="${f(r * 0.11)}" ${ck}/>`;
     out += `<ellipse class="cheek" cx="${f(eyes[1] + r * 0.14)}" cy="${f(ey + r * 0.3)}" rx="${f(r * 0.17)}" ry="${f(r * 0.11)}" ${ck}/>`;
 
@@ -53,6 +53,18 @@
     eyes.forEach((ex, i) => {
       if (mood === 'happy' || mood === 'eat') {
         eyeSvg += `<path d="M${f(ex - rx * 1.1)} ${f(ey + ry * 0.35)} Q${f(ex)} ${f(ey - ry * 1.1)} ${f(ex + rx * 1.1)} ${f(ey + ry * 0.35)}" stroke="${INK}" stroke-width="${sw}" fill="none" stroke-linecap="round"/>`;
+      } else if (mood === 'spicy' || mood === 'sour') {
+        // ojos apretados: > <
+        const d = rx * 1.05, k = i === 0 ? 1 : -1;
+        eyeSvg += `<path d="M${f(ex - d * k)} ${f(ey - d * 0.8)} L${f(ex + d * k)} ${f(ey)} L${f(ex - d * k)} ${f(ey + d * 0.8)}" stroke="${INK}" stroke-width="${sw}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+      } else if (mood === 'love') {
+        // ojos de corazón
+        const k = rx * 1.25;
+        eyeSvg += `<path d="M${f(ex)} ${f(ey + k)} C${f(ex - k * 1.6)} ${f(ey - k * 0.1)} ${f(ex - k * 0.9)} ${f(ey - k * 1.3)} ${f(ex)} ${f(ey - k * 0.45)} C${f(ex + k * 0.9)} ${f(ey - k * 1.3)} ${f(ex + k * 1.6)} ${f(ey - k * 0.1)} ${f(ex)} ${f(ey + k)} Z" fill="#ff4f6d" stroke="${INK}" stroke-width="${f(sw * 0.6)}" stroke-linejoin="round"/>`;
+      } else if (mood === 'surprise') {
+        // ojos bien abiertos, con brillo grande
+        eyeSvg += `<g class="eye"><ellipse cx="${f(ex)}" cy="${f(ey)}" rx="${f(rx * 1.3)}" ry="${f(ry * 1.3)}" fill="${INK}"/>` +
+          `<circle cx="${f(ex + rx * 0.4)}" cy="${f(ey - ry * 0.45)}" r="${f(rx * 0.55)}" fill="#fff"/><circle cx="${f(ex - rx * 0.4)}" cy="${f(ey + ry * 0.5)}" r="${f(rx * 0.22)}" fill="#fff" opacity=".85"/></g>`;
       } else if (mood === 'sleep' || mood === 'yawn') {
         eyeSvg += `<path d="M${f(ex - rx * 1.1)} ${f(ey)} Q${f(ex)} ${f(ey + ry * 0.9)} ${f(ex + rx * 1.1)} ${f(ey)}" stroke="${INK}" stroke-width="${sw}" fill="none" stroke-linecap="round"/>`;
       } else if (mood === 'dead') {
@@ -76,7 +88,7 @@
         }
       }
     });
-    out += `<g class="eyes${mood === 'normal' || mood === 'sad' ? ' blink' : ''}">${eyeSvg}</g>`;
+    out += `<g class="eyes${mood === 'normal' || mood === 'sad' || mood === 'surprise' ? ' blink' : ''}">${eyeSvg}</g>`;
     if (mood === 'sad') {
       out += `<path class="tear" d="M${f(eyes[0] - rx * 0.4)} ${f(ey + ry * 1.1)} q${f(-r * 0.06)} ${f(r * 0.14)} 0 ${f(r * 0.17)} q${f(r * 0.06)} ${f(-r * 0.03)} 0 ${f(-r * 0.17)}z" fill="#7cc7ff"/>`;
     }
@@ -84,15 +96,23 @@
       out += `<path d="M${f(hx + r * 0.75)} ${f(hy - r * 0.55)} q${f(-r * 0.09)} ${f(r * 0.17)} 0 ${f(r * 0.22)} q${f(r * 0.09)} ${f(-r * 0.05)} 0 ${f(-r * 0.22)}z" fill="#8fd3ff" stroke="#fff" stroke-width="1"/>`;
     }
 
-    // boca
+    // boca. ("talk" es la boca abierta para cuando habla: la anima js/anim.js; "lick" es la lengüita de relamerse)
     const mx = hx + r * 0.06, my = hy + r * 0.36;
+    const talks = ['normal', 'happy', 'sad', 'love', 'surprise'].includes(mood);
     if (kind === 'beak') {
       out += beak(mx, my - r * 0.06, r, mood, c);
     } else {
       if (kind === 'snout') {
         out += `<circle cx="${f(mx - r * 0.08)}" cy="${f(my - r * 0.14)}" r="${f(r * 0.03)}" fill="${c.dark}"/><circle cx="${f(mx + r * 0.1)}" cy="${f(my - r * 0.14)}" r="${f(r * 0.03)}" fill="${c.dark}"/>`;
       }
-      out += mouth(mx, my, r, mood, kind === 'lizard' ? c.tongue : '#ff7d8f');
+      const tg = kind === 'lizard' ? c.tongue : '#ff7d8f';
+      out += `<g class="mouth">${mouth(mx, my, r, mood, tg)}</g>`;
+      if (talks) {
+        const w = r * 0.15;
+        out += `<g class="talk" style="opacity:0"><path d="M${f(mx - w)} ${f(my - r * 0.01)} Q${f(mx)} ${f(my + r * 0.3)} ${f(mx + w)} ${f(my - r * 0.01)} Q${f(mx)} ${f(my + r * 0.05)} ${f(mx - w)} ${f(my - r * 0.01)} Z" fill="#7a2630" stroke="${INK}" stroke-width="${f(r * 0.035)}" stroke-linejoin="round"/>` +
+          `<ellipse cx="${f(mx + r * 0.01)}" cy="${f(my + r * 0.15)}" rx="${f(w * 0.5)}" ry="${f(r * 0.05)}" fill="${tg}"/></g>`;
+        out += `<g class="lick" style="opacity:0;transform-origin:${f(mx)}px ${f(my + r * 0.05)}px"><path d="M${f(mx - r * 0.02)} ${f(my + r * 0.04)} q${f(r * 0.24)} ${f(r * 0.02)} ${f(r * 0.24)} ${f(r * 0.16)} q${f(-r * 0.02)} ${f(r * 0.12)} ${f(-r * 0.14)} ${f(r * 0.06)} z" fill="${tg}" stroke="${INK}" stroke-width="${f(r * 0.03)}"/></g>`;
+      }
     }
     return out;
   }
@@ -125,19 +145,36 @@
     if (mood === 'dead') {
       return `<path d="M${f(mx - w * 0.8)} ${f(my + r * 0.06)} L${f(mx + w * 0.8)} ${f(my + r * 0.06)}" stroke="${INK}" stroke-width="${sw}" stroke-linecap="round"/>`;
     }
+    if (mood === 'surprise') {
+      return `<ellipse cx="${f(mx)}" cy="${f(my + r * 0.1)}" rx="${f(w * 0.55)}" ry="${f(r * 0.12)}" fill="#7a2630" stroke="${INK}" stroke-width="${f(sw * 0.6)}"/>`;
+    }
+    if (mood === 'love') {
+      return `<path d="M${f(mx - w * 1.1)} ${f(my - r * 0.02)} Q${f(mx)} ${f(my + r * 0.3)} ${f(mx + w * 1.1)} ${f(my - r * 0.02)} Z" fill="#7a2630"/>` +
+        `<ellipse cx="${f(mx + r * 0.02)}" cy="${f(my + r * 0.12)}" rx="${f(w * 0.5)}" ry="${f(r * 0.055)}" fill="${tongue}"/>`;
+    }
+    if (mood === 'spicy') {
+      // boca abierta con la lengua afuera
+      return `<path d="M${f(mx - w * 1.2)} ${f(my - r * 0.04)} Q${f(mx)} ${f(my + r * 0.4)} ${f(mx + w * 1.2)} ${f(my - r * 0.04)} Z" fill="#7a2630"/>` +
+        `<path class="tongue-out" d="M${f(mx - w * 0.45)} ${f(my + r * 0.1)} q${f(w * 0.45)} ${f(r * 0.38)} ${f(w * 0.9)} 0 z" fill="${tongue}" stroke="${INK}" stroke-width="${f(sw * 0.5)}"/>`;
+    }
+    if (mood === 'sour') {
+      // boca fruncida
+      return `<path d="M${f(mx - w * 0.5)} ${f(my + r * 0.08)} q${f(w * 0.25)} ${f(-r * 0.08)} ${f(w * 0.5)} 0 q${f(w * 0.25)} ${f(r * 0.08)} ${f(w * 0.5)} 0" stroke="${INK}" stroke-width="${sw}" fill="none" stroke-linecap="round"/>`;
+    }
     return `<path d="M${f(mx - w)} ${f(my)} Q${f(mx)} ${f(my + r * 0.16)} ${f(mx + w)} ${f(my)}" stroke="${INK}" stroke-width="${sw}" fill="none" stroke-linecap="round"/>`;
   }
 
   function beak(bx, by, r, mood, c) {
     const L = r * 0.34, H = r * 0.15;
-    const open = mood === 'happy' || mood === 'eat' || mood === 'yawn';
+    const open = mood === 'happy' || mood === 'eat' || mood === 'yawn' || mood === 'spicy' || mood === 'love' || mood === 'surprise';
     const upper = `<path d="M${f(bx - L * 0.45)} ${f(by - H)} Q${f(bx + L * 0.5)} ${f(by - H * 0.9)} ${f(bx + L * 0.75)} ${f(by + H * 0.25)} Q${f(bx + L * 0.1)} ${f(by + H * 0.25)} ${f(bx - L * 0.45)} ${f(by + H * 0.1)} Z" fill="${c.beak}" stroke="${shade(c.beak)}" stroke-width="1.2" stroke-linejoin="round"/>`;
     const dy = open ? H * 0.9 : 0;
     const lower = `<path d="M${f(bx - L * 0.4)} ${f(by + H * 0.2 + dy * 0.3)} Q${f(bx + L * 0.25)} ${f(by + H * 0.4 + dy)} ${f(bx + L * 0.5)} ${f(by + H * 0.35 + dy * 0.6)} Q${f(bx + L * 0.05)} ${f(by + H * 1.3 + dy)} ${f(bx - L * 0.4)} ${f(by + H * 0.8 + dy * 0.6)} Z" fill="${shade(c.beak, 0.92)}" stroke="${shade(c.beak)}" stroke-width="1.2" stroke-linejoin="round"/>`;
     let inside = '';
     if (open) inside = `<ellipse cx="${f(bx)}" cy="${f(by + H * 0.6)}" rx="${f(L * 0.35)}" ry="${f(H * 0.7)}" fill="#7a2630"/>`;
     const cls = mood === 'eat' ? ' class="peck"' : '';
-    return `<g${cls}>${inside}${lower}${upper}</g>`;
+    // la parte de abajo del pico se abre sola cuando habla (js/anim.js)
+    return `<g${cls}>${inside}<g class="blo" style="transform-origin:${f(bx - L * 0.4)}px ${f(by + H * 0.2)}px">${lower}</g>${upper}</g>`;
   }
 
   function shade(hex, k) {
@@ -214,7 +251,7 @@
     head += `<path d="M${f(hx - hr * 0.45)} ${f(hy - hr * 0.7)} q${f(-6 * hs)} ${f(-16 * hs)} ${f(-16 * hs)} ${f(-22 * hs)} q${f(4 * hs)} ${f(12 * hs)} ${f(2 * hs)} ${f(26 * hs)} z" fill="${c.horn}" stroke="${shade(c.horn, 0.8)}" stroke-width="1.2"/>`;
     head += `<path d="M${f(hx + hr * 0.12)} ${f(hy - hr * 0.86)} q${f(-4 * hs)} ${f(-17 * hs)} ${f(-13 * hs)} ${f(-25 * hs)} q${f(5 * hs)} ${f(13 * hs)} ${f(5 * hs)} ${f(27 * hs)} z" fill="${c.horn}" stroke="${shade(c.horn, 0.8)}" stroke-width="1.2"/>`;
     // aletas de oreja
-    head += `<path d="M${f(hx - hr * 0.86)} ${f(hy - hr * 0.1)} l${f(-hr * 0.42)} ${f(-hr * 0.22)} l${f(hr * 0.12)} ${f(hr * 0.38)} z" fill="${c.wingIn}" stroke="${c.dark}" stroke-width="1"/>`;
+    head += `<path class="ear" style="transform-origin:${f(hx - hr * 0.8)}px ${f(hy)}px" d="M${f(hx - hr * 0.86)} ${f(hy - hr * 0.1)} l${f(-hr * 0.42)} ${f(-hr * 0.22)} l${f(hr * 0.12)} ${f(hr * 0.38)} z" fill="${c.wingIn}" stroke="${c.dark}" stroke-width="1"/>`;
     head += `<circle cx="${hx}" cy="${hy}" r="${hr}" fill="${c.body}"/>`;
     if (G.snout) head += `<ellipse cx="${f(hx + hr * 0.2)}" cy="${f(hy + hr * 0.42)}" rx="${f(hr * 0.62)}" ry="${f(hr * 0.4)}" fill="${shade(c.body, 1.06)}"/>`;
     head += face({ x: hx, y: hy, r: hr }, mood, c, 'snout', G.eye);
@@ -325,7 +362,7 @@
     }
     // patas delanteras
     s += leg(G.legs[0][0], G.legs[0][1], 'foot-b');
-    s += leg(G.legs[1][0], G.legs[1][1], 'foot-a');
+    s += leg(G.legs[1][0], G.legs[1][1], 'foot-a front');
     // cabeza
     let head = `<circle cx="${hx}" cy="${hy}" r="${hr}" fill="${c.body}"/>`;
     head += `<ellipse cx="${f(hx + hr * 0.1)}" cy="${f(hy + hr * 0.5)}" rx="${f(hr * 0.7)}" ry="${f(hr * 0.35)}" fill="${c.belly}" opacity=".7"/>`;
@@ -356,7 +393,7 @@
     // cuello y cabeza (detrás del caparazón por abajo)
     s += `<path d="M${f(cx + rx * 0.6)} ${f(cy - ry * 0.05)} Q${f(hx - hr * 0.9)} ${f(hy + hr * 0.2)} ${f(hx - hr * 0.3)} ${f(hy + hr * 0.6)} L${f(hx + hr * 0.2)} ${f(hy + hr * 0.95)} Q${f(cx + rx * 0.95)} ${f(cy + 6)} ${f(cx + rx * 0.7)} ${f(cy + 8)} Z" fill="${c.body}"/>`;
     // patas de adelante
-    s += leg(cx - rx * 0.62, 'foot-b', c.body) + leg(cx + rx * 0.45, 'foot-a', c.body);
+    s += leg(cx - rx * 0.62, 'foot-b', c.body) + leg(cx + rx * 0.45, 'foot-a front', c.body);
     // caparazón
     const dome = `M${f(cx - rx)} ${f(cy)} A${rx} ${ry} 0 0 1 ${f(cx + rx)} ${f(cy)} Z`;
     s += `<clipPath id="${id}"><path d="${dome}"/></clipPath>`;
@@ -440,6 +477,30 @@
           star(bx - w * 0.2, by - hh * 0.32, r * 0.05) + star(bx + w * 0.35, by - hh * 0.15, r * 0.035) + star(bx + w * 0.05, by - hh * 0.62, r * 0.03) +
           `<ellipse cx="${f(bx)}" cy="${f(by)}" rx="${f(r * 0.78)}" ry="${f(r * 0.15)}" fill="#3a2c9a" stroke="#2a1f6e" stroke-width="1.8"/></g>`;
       }
+      case 'beanie': {
+        const by = top + r * 0.42, w = r * 0.7;
+        return `<g><path d="M${f(x - w)} ${f(by)} Q${f(x - w)} ${f(by - r * 0.85)} ${f(x)} ${f(by - r * 0.85)} Q${f(x + w)} ${f(by - r * 0.85)} ${f(x + w)} ${f(by)} Z" fill="#3a86ff" stroke="#1f4fa8" stroke-width="1.8" stroke-linejoin="round"/>` +
+          `<path d="M${f(x - w * 0.55)} ${f(by - r * 0.62)} L${f(x - w * 0.55)} ${f(by)} M${f(x)} ${f(by - r * 0.84)} L${f(x)} ${f(by)} M${f(x + w * 0.55)} ${f(by - r * 0.62)} L${f(x + w * 0.55)} ${f(by)}" stroke="#6ea8ff" stroke-width="2"/>` +
+          `<rect x="${f(x - w * 1.04)}" y="${f(by - r * 0.16)}" width="${f(w * 2.08)}" height="${f(r * 0.26)}" rx="${f(r * 0.1)}" fill="#ff5d73" stroke="#a8243a" stroke-width="1.6"/>` +
+          `<circle cx="${f(x)}" cy="${f(by - r * 0.92)}" r="${f(r * 0.17)}" fill="#fff" stroke="#c9c3d6" stroke-width="1.4"/></g>`;
+      }
+      case 'tiara': {
+        const by = top + r * 0.28, w = r * 0.5;
+        return `<g><path d="M${f(x - w)} ${f(by)} Q${f(x - w * 0.5)} ${f(by - r * 0.22)} ${f(x - w * 0.35)} ${f(by - r * 0.08)} L${f(x)} ${f(by - r * 0.42)} L${f(x + w * 0.35)} ${f(by - r * 0.08)} Q${f(x + w * 0.5)} ${f(by - r * 0.22)} ${f(x + w)} ${f(by)} Z" fill="#e8ecf5" stroke="#9aa3b8" stroke-width="1.6" stroke-linejoin="round"/>` +
+          `<circle cx="${f(x)}" cy="${f(by - r * 0.2)}" r="${f(r * 0.08)}" fill="#ff5d9e"/><circle cx="${f(x - w * 0.6)}" cy="${f(by - r * 0.06)}" r="${f(r * 0.05)}" fill="#7dd3fc"/><circle cx="${f(x + w * 0.6)}" cy="${f(by - r * 0.06)}" r="${f(r * 0.05)}" fill="#7dd3fc"/></g>`;
+      }
+      case 'cowboy': {
+        const by = top + r * 0.3, w = r * 0.55;
+        return `<g transform="rotate(-6 ${f(x)} ${f(by)})"><ellipse cx="${f(x)}" cy="${f(by)}" rx="${f(r * 1.1)}" ry="${f(r * 0.2)}" fill="#a0612b" stroke="#6b3d16" stroke-width="1.8"/>` +
+          `<path d="M${f(x - w)} ${f(by)} Q${f(x - w * 1.05)} ${f(by - r * 0.75)} ${f(x - w * 0.3)} ${f(by - r * 0.7)} Q${f(x)} ${f(by - r * 0.55)} ${f(x + w * 0.3)} ${f(by - r * 0.7)} Q${f(x + w * 1.05)} ${f(by - r * 0.75)} ${f(x + w)} ${f(by)} Z" fill="#c07a36" stroke="#6b3d16" stroke-width="1.8" stroke-linejoin="round"/>` +
+          `<rect x="${f(x - w)}" y="${f(by - r * 0.2)}" width="${f(w * 2)}" height="${f(r * 0.14)}" fill="#3d2410"/></g>`;
+      }
+      case 'bandana': {
+        const by = top + r * 0.5;
+        return `<g><path d="M${f(x - r * 0.98)} ${f(by + r * 0.12)} Q${f(x)} ${f(by - r * 0.18)} ${f(x + r * 0.98)} ${f(by + r * 0.12)} L${f(x + r * 0.95)} ${f(by + r * 0.34)} Q${f(x)} ${f(by + r * 0.04)} ${f(x - r * 0.95)} ${f(by + r * 0.34)} Z" fill="#ff4f6d" stroke="#a8243a" stroke-width="1.6" stroke-linejoin="round"/>` +
+          `<path d="M${f(x - r * 0.95)} ${f(by + r * 0.24)} l${f(-r * 0.3)} ${f(r * 0.1)} l${f(r * 0.05)} ${f(r * 0.22)} Z M${f(x - r * 0.95)} ${f(by + r * 0.24)} l${f(-r * 0.22)} ${f(r * 0.36)} l${f(r * 0.16)} ${f(r * 0.04)} Z" fill="#e63950"/>` +
+          `<path d="M${f(x - r * 0.5)} ${f(by + r * 0.08)} L${f(x + r * 0.5)} ${f(by + r * 0.08)}" stroke="#fff" stroke-width="1.6" stroke-dasharray="3 3" opacity=".8"/></g>`;
+      }
       default:
         return '';
     }
@@ -505,6 +566,16 @@
         `<path d="M${f(cx - 14)} ${f(cy)} a14 6 0 1 0 28 0 a14 6 0 1 0 -28 0" stroke="#8bc34a" stroke-width="2.5" fill="none" stroke-dasharray="6 5"/>` +
         `<circle cx="${f(cx + 14)}" cy="${f(cy)}" r="3.5" fill="#8bc34a"/><circle cx="${f(cx - 14)}" cy="${f(cy)}" r="3" fill="#8bc34a"/></g>`;
     }
+    if (mood === 'spicy') {
+      // humito por las orejas (o fuego, si es un dragón: lo dibuja el truco especial)
+      const cx = head.x, cy = head.top + head.r * 0.4;
+      const puff = (x, y, k, n) => `<g class="steam st${n}" style="transform-origin:${f(x)}px ${f(y)}px"><circle cx="${f(x)}" cy="${f(y)}" r="${f(5 * k)}" fill="#fff" opacity=".9"/><circle cx="${f(x + 5 * k)}" cy="${f(y - 4 * k)}" r="${f(4 * k)}" fill="#fff" opacity=".9"/><circle cx="${f(x - 4 * k)}" cy="${f(y - 5 * k)}" r="${f(3.5 * k)}" fill="#fff" opacity=".85"/></g>`;
+      s += puff(cx - head.r * 1.05, cy, 1, 1) + puff(cx + head.r * 1.05, cy, 1, 2) + puff(cx, head.top - 6, 1.2, 3);
+    }
+    if (mood === 'sour') {
+      const x = head.x + dir * head.r * 0.95, y = head.top + head.r * 0.25;
+      s += `<path class="sweat" d="M${f(x)} ${f(y)} q${f(-4)} ${f(8)} 0 ${f(10)} q${f(4)} ${f(-2)} 0 ${f(-10)} z" fill="#8fd3ff" stroke="#fff" stroke-width="1"/>`;
+    }
     if (mood === 'dead') {
       s += `<ellipse class="halo" cx="${f(head.x)}" cy="${f(head.top - 10)}" rx="${f(head.r * 0.65)}" ry="${f(head.r * 0.18)}" fill="none" stroke="#ffd23f" stroke-width="5"/>`;
     }
@@ -551,7 +622,7 @@
     const shadowW = ({ baby: 34, young: 44, adult: 54 }[o.stage] || 40) * (o.species === 'turtle' ? 1.15 : 1);
     const fh = flipHead(r.head, o.dir);
     // posición de la cabeza (para ubicar cosas cerca: el ícono de pedidos, etc.)
-    const hd = ` data-hx="${f(fh.x)}" data-ht="${f(fh.top)}" data-hr="${f(fh.r)}" data-dir="${o.dir === -1 ? -1 : 1}"`;
+    const hd = ` data-hx="${f(fh.x)}" data-hy="${f(fh.y)}" data-ht="${f(fh.top)}" data-hr="${f(fh.r)}" data-dir="${o.dir === -1 ? -1 : 1}"`;
     return `<svg class="${cls.join(' ')}" viewBox="-20 0 240 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"${hd}>` + volumeDefs(id, c) +
       `<ellipse class="shadow" cx="100" cy="191" rx="${shadowW}" ry="6" fill="#000" opacity=".16"/>` +
       `<g class="flipper"${flip}><g class="bob">${body}</g></g>` +
@@ -688,9 +759,37 @@
   }
 
   /* Ilustraciones de objetos de la tienda (color) */
+  // Comida con emoji: se ve igual en Windows y en Android (y sirve también como imagen en los juegos)
+  const EMOJI_FONT = `font-family="'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji','Android Emoji',sans-serif"`;
+  function emojiSVG(e, size) {
+    return `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><text x="24" y="${size ? 24 + size * 0.36 : 39}" font-size="${size || 36}" text-anchor="middle" ${EMOJI_FONT}>${e}</text></svg>`;
+  }
+  function potionSVG(col, sym) {
+    return `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M19 5h10v10l9 17a7 7 0 0 1-6 10H16a7 7 0 0 1-6-10l9-17z" fill="#f4fbff" stroke="#2a1f3d" stroke-width="2.4" stroke-linejoin="round"/>` +
+      `<path d="M13.5 27h21l4 7a5 5 0 0 1-4.5 6.5h-20a5 5 0 0 1-4.5-6.5z" fill="${col}"/><circle cx="18" cy="33" r="2" fill="#fff" opacity=".7"/><circle cx="27" cy="31" r="1.4" fill="#fff" opacity=".6"/>` +
+      `<rect x="17" y="2.5" width="14" height="5" rx="2" fill="#a86d3a" stroke="#2a1f3d" stroke-width="2"/>${sym || ''}</svg>`;
+  }
+  const POTION_SYM = {
+    p_energia: '<path d="M25 15l-5 8h4l-2 6 6-9h-4z" fill="#2a1f3d"/>',
+    p_alegria: '<path d="M24 25s-5-3-5-6.5a2.6 2.6 0 0 1 5-1.2 2.6 2.6 0 0 1 5 1.2c0 3.5-5 6.5-5 6.5z" fill="#2a1f3d"/>',
+    p_limpieza: '<circle cx="21" cy="19" r="2.6" fill="none" stroke="#2a1f3d" stroke-width="1.6"/><circle cx="27" cy="22" r="1.8" fill="none" stroke="#2a1f3d" stroke-width="1.6"/>',
+    p_llenura: '<path d="M20 16v6a2 2 0 0 0 4 0v-6M22 16v12M28 16c-1.4 0-2 2-2 4.5s.6 2.6 2 2.6V28" stroke="#2a1f3d" stroke-width="1.6" fill="none" stroke-linecap="round"/>',
+  };
   function itemSVG(id, species) {
     const w = (inner) => `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${inner}</svg>`;
+    const it = N.core && N.core.ITEMS[id];
+    if (it && it.emoji) return emojiSVG(it.emoji);
+    if (it && it.potion) return potionSVG(it.potion, POTION_SYM[id]);
+    if (it && it.kind === 'seed') {
+      const crop = N.core.ITEMS[N.core.SEEDS[id].crop];
+      return w(`<path d="M9 8h30l-2 34H11z" fill="#f3e3c3" stroke="#8a5a2b" stroke-width="2.2" stroke-linejoin="round"/><path d="M9 8h30v6H9z" fill="#c98b4a" stroke="#8a5a2b" stroke-width="2.2"/>` +
+        `<text x="24" y="35" font-size="19" text-anchor="middle" ${EMOJI_FONT}>${crop.emoji}</text><circle cx="15" cy="20" r="1.4" fill="#8a5a2b"/><circle cx="33" cy="20" r="1.4" fill="#8a5a2b"/>`);
+    }
     switch (id) {
+      case 'beanie': return w('<path d="M8 32Q8 10 24 10Q40 10 40 32Z" fill="#3a86ff" stroke="#1f4fa8" stroke-width="2"/><rect x="6" y="30" width="36" height="8" rx="3" fill="#ff5d73" stroke="#a8243a" stroke-width="2"/><circle cx="24" cy="9" r="5" fill="#fff" stroke="#c9c3d6" stroke-width="1.5"/>');
+      case 'tiara': return w('<path d="M6 32Q14 26 17 30L24 12l7 18q3-4 11 2v4H6z" fill="#e8ecf5" stroke="#9aa3b8" stroke-width="2" stroke-linejoin="round"/><circle cx="24" cy="24" r="3.5" fill="#ff5d9e"/><circle cx="13" cy="32" r="2" fill="#7dd3fc"/><circle cx="35" cy="32" r="2" fill="#7dd3fc"/>');
+      case 'cowboy': return w('<ellipse cx="24" cy="34" rx="22" ry="6" fill="#a0612b" stroke="#6b3d16" stroke-width="2"/><path d="M12 34Q10 14 19 14q5 4 10 0q9 0 7 20z" fill="#c07a36" stroke="#6b3d16" stroke-width="2" stroke-linejoin="round"/><rect x="12" y="27" width="24" height="4" fill="#3d2410"/>');
+      case 'bandana': return w('<path d="M5 22Q24 12 43 22v8Q24 20 5 30z" fill="#ff4f6d" stroke="#a8243a" stroke-width="2" stroke-linejoin="round"/><path d="M6 27l-4 12 6-1zM6 27l3 13 4-3z" fill="#e63950"/><path d="M14 23h20" stroke="#fff" stroke-width="2" stroke-dasharray="3 3"/>');
       case 'fruit': return w('<path d="M24 14c-6-4-16-2-16 10 0 10 7 18 12 18 2 0 3-1 4-1s2 1 4 1c5 0 12-8 12-18 0-12-10-14-16-10z" fill="#ff5d5d"/><path d="M24 14c0-4 2-7 5-8" stroke="#6b4226" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M26 10c4-4 9-3 10-1-3 3-7 3-10 1z" fill="#6cc04a"/><ellipse cx="16" cy="22" rx="3" ry="5" fill="#fff" opacity=".45"/>');
       case 'fav':
         if (species === 'bird') return w('<path d="M8 26h32c0 9-7 15-16 15S8 35 8 26z" fill="#c98b4a"/><path d="M8 26h32" stroke="#9a6430" stroke-width="2"/><g fill="#f1d27a">' + [[14, 22], [20, 20], [26, 21], [32, 22], [17, 25], [24, 24], [30, 25], [22, 17], [28, 18]].map(([x, y]) => `<ellipse cx="${x}" cy="${y}" rx="2.6" ry="1.8"/>`).join('') + '</g>');
@@ -714,5 +813,5 @@
     }
   }
 
-  N.art = { petSVG, eggSVG, poopSVG, graveSVG, butterflySVG, icon, itemSVG, palette, EGG };
+  N.art = { petSVG, eggSVG, poopSVG, graveSVG, butterflySVG, icon, itemSVG, emojiSVG, palette, EGG, EMOJI_FONT };
 })();

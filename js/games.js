@@ -344,5 +344,333 @@
     return { stop() { running = false; cancelAnimationFrame(raf); window.removeEventListener('keydown', onKey); } };
   }
 
-  N.games = { catch: catchGame, guess: guessGame, memory: memoryGame, bubbles: bubblesGame, simon: simonGame, jump: jumpGame };
+
+  /* ===================== 2.0: juegos nuevos ===================== */
+  const petOf = () => { const S0 = N.core.state, p = S0.pet; return { species: p ? p.species : 'dragon', stage: p && p.stage !== 'egg' ? p.stage : 'baby', variant: p ? p.variant : 'normal', accessory: S0.wearing }; };
+  const petImgOf = (mood, extra) => imgFromSVG(art.petSVG(Object.assign(petOf(), { mood: mood || 'happy', dir: 1 }, extra || {})).replace('<svg ', '<svg width="240" height="200" '));
+  const emojiImg = (e) => imgFromSVG(art.emojiSVG(e).replace('<svg ', '<svg width="96" height="96" '));
+  const later = (list, fn, ms) => { const t = setTimeout(fn, ms); list.push(t); return t; };
+
+  /* ---------- Penales: pateás al arco y tu mascota ataja ---------- */
+  function golGame(root, finish) {
+    const SHOTS = 5;
+    root.innerHTML = `<div class="g-gol"><div class="g-top"><span>Tiro <b class="rd">1</b>/${SHOTS}</span><span>Goles <b class="sc">0</b></span></div>
+      <div class="gol-field"><div class="gol-goal">${N.houseArt.goalSVG()}<div class="gol-keeper"></div>${[0, 1, 2, 3, 4, 5].map((i) => `<button type="button" class="gol-zone z${i}" data-z="${i}" aria-label="Patear acá"></button>`).join('')}</div><div class="gol-ball">${N.houseArt.icon('soccer')}</div></div>
+      <p class="gg-msg">Tocá dónde querés patear</p></div>`;
+    const keeper = root.querySelector('.gol-keeper'), ball = root.querySelector('.gol-ball'), msg = root.querySelector('.gg-msg'), goal = root.querySelector('.gol-goal');
+    const kv = N.ui.liveView(keeper);
+    let shot = 0, goals = 0, busy = false, alive = true; const timers = [], hist = [];
+    goal.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-z]'); if (!b || busy || !alive) return;
+      busy = true;
+      const z = +b.dataset.z, col = z % 3, row = Math.floor(z / 3);
+      // la mascota se tira: a veces adivina, y si repetís mucho el mismo lado te lee
+      const fav = hist.length >= 2 && hist[hist.length - 1] % 3 === hist[hist.length - 2] % 3 ? hist[hist.length - 1] % 3 : null;
+      let dive = fav != null && Math.random() < 0.7 ? fav : Math.floor(Math.random() * 3);
+      if (Math.random() < 0.12) dive = col; // de vez en cuando adivina igual
+      hist.push(z);
+      const saved = dive === col && !(row === 0 && Math.random() < 0.35); // arriba es más difícil de atajar
+      const gr = goal.getBoundingClientRect(), br = b.getBoundingClientRect(), fr = ball.getBoundingClientRect();
+      const tx = br.left + br.width / 2 - (fr.left + fr.width / 2), ty = br.top + br.height / 2 - (fr.top + fr.height / 2);
+      keeper.style.transform = `translateX(${(dive - 1) * gr.width * 0.3}px) translateY(${row === 0 ? -gr.height * 0.12 : 0}px) rotate(${(dive - 1) * 22}deg)`;
+      snd.play('tap');
+      if (ball.animate) ball.animate([{ transform: 'translate(0,0) scale(1)' }, { transform: `translate(${tx}px, ${ty}px) scale(.62)` }], { duration: 420, easing: 'cubic-bezier(.2,.7,.4,1)', fill: 'forwards' });
+      later(timers, () => {
+        shot++;
+        if (saved) { msg.textContent = '¡Atajó!'; kv.setTemp('happy', 900); snd.play('bad'); }
+        else { goals++; msg.textContent = '¡Gooool!'; kv.setTemp('surprise', 900); snd.play('good'); goal.classList.remove('shake'); void goal.offsetWidth; goal.classList.add('shake'); }
+        root.querySelector('.sc').textContent = goals;
+      }, 440);
+      later(timers, () => {
+        if (!alive) return;
+        if (shot >= SHOTS) { finish(goals, SHOTS); return; }
+        root.querySelector('.rd').textContent = shot + 1;
+        keeper.style.transform = ''; if (ball.getAnimations) ball.getAnimations().forEach((a) => a.cancel());
+        msg.textContent = 'Tocá dónde querés patear'; busy = false;
+      }, 1300);
+    });
+    root._game = { get busy() { return busy; }, get shot() { return shot; } };
+    return { stop() { alive = false; timers.forEach(clearTimeout); } };
+  }
+
+  /* ---------- Ta-te-tí contra tu mascota (3 rondas) ---------- */
+  function tatetiGame(root, finish) {
+    const ROUNDS = 3, MAX = ROUNDS * 2;
+    root.innerHTML = `<div class="g-tateti"><div class="g-top"><span>Ronda <b class="rd">1</b>/${ROUNDS}</span><span>Puntos <b class="sc">0</b></span></div>
+      <div class="ttt-vs"><span class="ttt-me">Vos <b>✕</b></span><div class="ttt-pet"></div><span class="ttt-it"><b>◯</b> Mascota</span></div>
+      <div class="ttt">${Array.from({ length: 9 }, (_, i) => `<button type="button" data-i="${i}" aria-label="Casilla ${i + 1}"></button>`).join('')}</div>
+      <p class="gg-msg">Te toca: poné tu ✕</p></div>`;
+    const cells = [...root.querySelectorAll('.ttt button')], msg = root.querySelector('.gg-msg');
+    const pv = N.ui.liveView(root.querySelector('.ttt-pet'));
+    const L = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
+    let board, round = 0, score = 0, busy = false, alive = true; const timers = [];
+    const win = (b, m) => L.some((l) => l.every((i) => b[i] === m));
+    const full = (b) => b.every((x) => x);
+    function minimax(b, me) {
+      if (win(b, 'o')) return { s: 1 }; if (win(b, 'x')) return { s: -1 }; if (full(b)) return { s: 0 };
+      let best = { s: me ? -2 : 2, i: -1 };
+      b.forEach((v, i) => { if (v) return; b[i] = me ? 'o' : 'x'; const r = minimax(b, !me); b[i] = null; if (me ? r.s > best.s : r.s < best.s) best = { s: r.s, i }; });
+      return best;
+    }
+    function draw() { cells.forEach((c, i) => { c.textContent = board[i] === 'x' ? '✕' : board[i] === 'o' ? '◯' : ''; c.className = board[i] ? 'm' + board[i] : ''; /* (no 'x': esa clase es la del botón de cerrar la hoja) */ c.disabled = !!board[i] || busy; }); }
+    function start() { board = Array(9).fill(null); busy = false; msg.textContent = 'Te toca: poné tu ✕'; root.querySelector('.rd').textContent = round + 1; draw(); }
+    function endRound(res) {
+      busy = true; draw();
+      if (res === 'x') { score += 2; msg.textContent = '¡Le ganaste!'; pv.setTemp('sad', 1200); snd.play('good'); }
+      else if (res === 'o') { msg.textContent = 'Ganó tu mascota'; pv.setTemp('happy', 1200); snd.play('bad'); }
+      else { score += 1; msg.textContent = 'Empate'; snd.play('tap'); }
+      root.querySelector('.sc').textContent = score;
+      later(timers, () => { if (!alive) return; round++; if (round >= ROUNDS) finish(score, MAX); else start(); }, 1400);
+    }
+    root.querySelector('.ttt').addEventListener('click', (e) => {
+      const c = e.target.closest('[data-i]'); if (!c || busy || !alive) return;
+      const i = +c.dataset.i; if (board[i]) return;
+      board[i] = 'x'; snd.play('tap');
+      if (win(board, 'x')) return endRound('x');
+      if (full(board)) return endRound('-');
+      busy = true; draw(); msg.textContent = 'Está pensando…';
+      later(timers, () => {
+        if (!alive) return;
+        // juega bien casi siempre, pero a veces se distrae (así se le puede ganar)
+        const free = board.map((v, k) => (v ? -1 : k)).filter((k) => k >= 0);
+        const j = Math.random() < 0.62 ? minimax(board.slice(), true).i : free[Math.floor(Math.random() * free.length)];
+        board[j] = 'o'; busy = false;
+        if (win(board, 'o')) return endRound('o');
+        if (full(board)) return endRound('-');
+        msg.textContent = 'Te toca: poné tu ✕'; draw();
+      }, 650);
+    });
+    start();
+    root._game = { get board() { return board; }, get busy() { return busy; } };
+    return { stop() { alive = false; timers.forEach(clearTimeout); } };
+  }
+
+  /* ---------- Topos: tocá los topos, no a tu mascota ---------- */
+  function toposGame(root, finish) {
+    const DUR = 25000, MAX = 20;
+    root.innerHTML = `<div class="g-topos"><div class="g-top"><span>Topos <b class="sc">0</b></span><span>Tiempo <b class="tm">25</b></span></div>
+      <div class="holes">${Array.from({ length: 9 }, (_, i) => `<button type="button" class="hole" data-i="${i}" aria-label="Pozo ${i + 1}"><span class="who"></span><span class="dirt"></span></button>`).join('')}</div>
+      <p class="g-hint">Tocá a los topos cuando asoman. Si tocás a tu mascota, perdés 2.</p></div>`;
+    const holes = [...root.querySelectorAll('.hole')];
+    const petSvg = art.petSVG(Object.assign(petOf(), { mood: 'happy', dir: 1 }));
+    let score = 0, alive = true, t0 = Date.now(), played = 0, last = Date.now(); const timers = [], up = {};
+    const showSc = show(root.querySelector('.sc')), showTm = show(root.querySelector('.tm'));
+    function pop() {
+      if (!alive) return;
+      const free = holes.map((_, i) => i).filter((i) => !up[i]);
+      if (free.length) {
+        const i = free[Math.floor(Math.random() * free.length)], isPet = Math.random() < 0.2;
+        up[i] = isPet ? 'pet' : 'mole';
+        const w = holes[i].querySelector('.who');
+        w.innerHTML = isPet ? petSvg : `<span class="mole">${art.emojiSVG('🐹')}</span>`;
+        holes[i].classList.add('up');
+        const stay = Math.max(520, 1100 - played / 40);
+        later(timers, () => { if (up[i]) { delete up[i]; holes[i].classList.remove('up', 'hit'); } }, stay);
+      }
+      later(timers, pop, Math.max(330, 700 - played / 60) * (0.7 + Math.random() * 0.6));
+    }
+    root.querySelector('.holes').addEventListener('pointerdown', (e) => {
+      const b = e.target.closest('.hole'); if (!b || !alive) return;
+      const i = +b.dataset.i, w = up[i]; if (!w) return;
+      delete up[i]; b.classList.add('hit');
+      if (w === 'pet') { score = Math.max(0, score - 2); snd.play('bad'); } else { score++; snd.play('good'); }
+      showSc(score);
+      later(timers, () => b.classList.remove('up', 'hit'), 180);
+    });
+    const tick = setInterval(() => {
+      const n = Date.now(), raw = n - last; last = n; played += Math.min(250, raw);
+      showTm(Math.max(0, Math.ceil((DUR - played) / 1000)));
+      if (played >= DUR) { alive = false; clearInterval(tick); timers.forEach(clearTimeout); finish(Math.min(score, MAX), MAX); }
+    }, 100);
+    later(timers, pop, 500);
+    root._game = { get up() { return up; } };
+    void t0;
+    return { stop() { alive = false; clearInterval(tick); timers.forEach(clearTimeout); } };
+  }
+
+  /* ---------- Pileta: saltá de flotador en flotador ---------- */
+  function piletaGame(root, finish) {
+    root.innerHTML = `<div class="g-catch"><div class="g-top"><span>Saltos <b class="sc">0</b></span><span>Vidas <b class="lv">3</b></span><span>Tiempo <b class="tm">40</b></span></div>
+      <canvas class="g-canvas g-jump" width="360" height="420" aria-label="Juego: pileta"></canvas>
+      <p class="g-hint">Tocá para saltar al flotador de arriba cuando pase justo por encima.</p></div>`;
+    const cv = root.querySelector('canvas'), g = cv.getContext('2d');
+    const { W, H } = hiDPI(cv), MAX = 12, ROW = 120, PW = 100, PH = 84, DUR = 40000;
+    const showSc = show(root.querySelector('.sc')), showLv = show(root.querySelector('.lv')), showTm = show(root.querySelector('.tm'));
+    let played = 0;
+    const petImg = petImgOf('happy'), sadImg = petImgOf('sad');
+    // flotadores: uno por fila; cada uno va y viene a su velocidad
+    const rows = [];
+    const mk = (k) => ({ x: 60 + Math.random() * (W - 120), v: (0.07 + Math.random() * 0.06 + k * 0.004) * (Math.random() < 0.5 ? -1 : 1), w: Math.max(70, 110 - k * 3) });
+    for (let k = 0; k < 20; k++) rows.push(mk(k));
+    rows[0].v = 0; rows[0].x = W / 2;
+    let cur = 0, score = 0, lives = 3, cam = 0, jump = null, splash = 0, running = true, raf = 0, last = performance.now(), wob = 0;
+    const lane = (k) => H - 70 - (k * ROW) + cam;
+    const doJump = () => { if (!running || jump || splash > 0) return; jump = { t: 0, from: rows[cur].x }; snd.play('tap'); };
+    cv.addEventListener('pointerdown', (e) => { e.preventDefault(); doJump(); });
+    const onKey = (e) => { if (e.code === 'Space' || e.key === ' ' || e.key === 'ArrowUp') { e.preventDefault(); if (!e.repeat) doJump(); } };
+    window.addEventListener('keydown', onKey);
+    cv.style.touchAction = 'none';
+    function frame(now) {
+      if (!running) return;
+      if (now - last < 14) { raf = requestAnimationFrame(frame); return; }
+      const raw = Math.max(0, now - last), dt = Math.min(40, raw); last = now; wob += dt;
+      played += Math.min(250, raw);
+      showTm(Math.max(0, Math.ceil((DUR - played) / 1000)));
+      if (played >= DUR && !jump) { running = false; window.removeEventListener('keydown', onKey); finish(Math.min(score, MAX), MAX); return; }
+      rows.forEach((r, k) => { if (k <= cur - 1 || (jump && k === cur + 1)) return; r.x += r.v * dt; // (mientras salta, el flotador de destino se queda quieto)
+        if (r.x < r.w / 2 + 6 || r.x > W - r.w / 2 - 6) { r.v *= -1; r.x = Math.max(r.w / 2 + 6, Math.min(W - r.w / 2 - 6, r.x)); } });
+      let px = rows[cur].x, py = lane(cur);
+      if (jump) {
+        jump.t += dt;
+        const k = Math.min(1, jump.t / 520);
+        px = jump.from; // salta derecho para arriba: tiene que caer justo sobre el flotador
+        py = lane(cur) + (lane(cur + 1) - lane(cur)) * k - Math.sin(Math.PI * k) * 40;
+        if (k >= 1) {
+          const target = rows[cur + 1];
+          if (Math.abs(target.x - jump.from) < target.w / 2 + 6) { cur++; score++; showSc(score); snd.play('good'); }
+          else { lives--; showLv(lives); splash = 900; snd.play('bad'); }
+          jump = null;
+          if (score >= MAX || lives <= 0) { running = false; window.removeEventListener('keydown', onKey); setTimeout(() => finish(Math.min(score, MAX), MAX), 500); }
+        }
+      }
+      if (splash > 0) splash -= dt;
+      // la cámara sigue a la mascota
+      const want = cur * ROW; cam += (want - cam) * Math.min(1, dt / 160);
+      g.fillStyle = '#4fc3f7'; g.fillRect(0, 0, W, H);
+      g.strokeStyle = 'rgba(255,255,255,.45)'; g.lineWidth = 3;
+      for (let y = (cam % 40) - 40; y < H; y += 40) { g.beginPath(); for (let x = 0; x <= W; x += 20) g.lineTo(x, y + Math.sin((x + wob / 10) / 30) * 4); g.stroke(); }
+      rows.forEach((r, k) => {
+        const y = lane(k); if (y < -40 || y > H + 40) return;
+        g.fillStyle = k % 2 ? '#ffd23f' : '#ff5d73'; g.strokeStyle = '#2a1f3d'; g.lineWidth = 3;
+        g.beginPath(); g.ellipse(r.x, y, r.w / 2, 16, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+        g.fillStyle = '#4fc3f7'; g.beginPath(); g.ellipse(r.x, y - 2, r.w / 4, 6, 0, 0, Math.PI * 2); g.fill();
+      });
+      if (splash > 0) {
+        g.fillStyle = 'rgba(255,255,255,.85)'; for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(px + Math.cos(i) * 30 * (1 - splash / 900), lane(cur) - 30 * (1 - splash / 900) + i * 3, 5, 0, Math.PI * 2); g.fill(); }
+      } else {
+        const im = ready(petImg) ? petImg : null;
+        if (im) g.drawImage(splash > 0 ? sadImg : im, px - PW / 2, py - PH + 14, PW, PH);
+      }
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+    root._game = { get rows() { return rows; }, get cur() { return cur; }, get jumping() { return !!jump; }, get splash() { return splash; }, jump: doJump };
+    return { stop() { running = false; cancelAnimationFrame(raf); window.removeEventListener('keydown', onKey); } };
+  }
+
+  /* ---------- Carrera: manejá y esquivá los conos ---------- */
+  function carreraGame(root, finish) {
+    root.innerHTML = `<div class="g-catch"><div class="g-top"><span>Puntos <b class="sc">0</b></span><span>Vidas <b class="lv">3</b></span><span>Tiempo <b class="tm">30</b></span></div>
+      <canvas class="g-canvas g-jump" width="360" height="420" aria-label="Juego: carrera"></canvas>
+      <p class="g-hint">Tocá a la izquierda o a la derecha para cambiar de carril (o usá las flechas).</p></div>`;
+    const cv = root.querySelector('canvas'), g = cv.getContext('2d');
+    const { W, H } = hiDPI(cv), DUR = 30000, MAX = 25, LANES = [W * 0.2, W * 0.5, W * 0.8];
+    const showSc = show(root.querySelector('.sc')), showLv = show(root.querySelector('.lv')), showTm = show(root.querySelector('.tm'));
+    const petImg = petImgOf('happy');
+    const cone = emojiImg('🚧'), coin = imgFromSVG(art.itemSVG('coin').replace('<svg ', '<svg width="96" height="96" '));
+    let lane = 1, x = LANES[1], items = [], spawn = 600, score = 0, lives = 3, hurt = 0, played = 0, last = performance.now(), running = true, raf = 0, road = 0;
+    const move = (d) => { if (!running) return; lane = Math.max(0, Math.min(2, lane + d)); snd.play('tap'); };
+    cv.addEventListener('pointerdown', (e) => { e.preventDefault(); const r = cv.getBoundingClientRect(); move(e.clientX - r.left < r.width / 2 ? -1 : 1); });
+    const onKey = (e) => { if (e.key === 'ArrowLeft') { e.preventDefault(); move(-1); } if (e.key === 'ArrowRight') { e.preventDefault(); move(1); } };
+    window.addEventListener('keydown', onKey);
+    cv.style.touchAction = 'none';
+    function frame(now) {
+      if (!running) return;
+      if (now - last < 14) { raf = requestAnimationFrame(frame); return; }
+      const raw = Math.max(0, now - last), dt = Math.min(40, raw); last = now;
+      const el = (played += Math.min(250, raw)), sp = 0.22 + el / 90000;
+      x += (LANES[lane] - x) * Math.min(1, dt / 90);
+      road = (road + sp * dt) % 60;
+      spawn -= sp * dt;
+      if (spawn <= 0) {
+        const free = [0, 1, 2].sort(() => Math.random() - 0.5);
+        const n = Math.random() < 0.3 && el > 6000 ? 2 : 1; // a veces dos conos: siempre queda un carril libre
+        for (let i = 0; i < n; i++) items.push({ lane: free[i], y: -30, kind: 'cone' });
+        if (Math.random() < 0.5) items.push({ lane: free[2], y: -90, kind: 'coin' });
+        spawn = 170 + Math.random() * 120;
+      }
+      const carY = H - 70;
+      items.forEach((it) => {
+        it.y += sp * dt;
+        if (!it.done && Math.abs(it.y - carY) < 34 && Math.abs(LANES[it.lane] - x) < 42) {
+          it.done = true;
+          if (it.kind === 'coin') { score += 2; showSc(score); snd.play('coin'); }
+          else if (hurt <= 0) { lives--; hurt = 1000; showLv(lives); snd.play('bad'); }
+        }
+        if (!it.passed && it.kind === 'cone' && it.y > carY + 30) { it.passed = true; if (!it.done) { score++; showSc(score); } }
+      });
+      items = items.filter((it) => it.y < H + 40 && !(it.done && it.kind === 'coin'));
+      if (hurt > 0) hurt -= dt;
+      // dibujo
+      g.fillStyle = '#6cc04a'; g.fillRect(0, 0, W, H);
+      g.fillStyle = '#5a6170'; g.fillRect(W * 0.05, 0, W * 0.9, H);
+      g.fillStyle = '#fff'; for (let y = -60 + road; y < H; y += 60) { g.fillRect(W * 0.35 - 3, y, 6, 30); g.fillRect(W * 0.65 - 3, y, 6, 30); }
+      items.forEach((it) => { const im = it.kind === 'coin' ? coin : cone; if (ready(im)) g.drawImage(im, LANES[it.lane] - 22, it.y - 22, 44, 44); });
+      if (!(hurt > 0 && Math.floor(hurt / 120) % 2)) {
+        g.save(); g.translate(x, carY);
+        g.fillStyle = '#e8394a'; g.strokeStyle = '#2a1f3d'; g.lineWidth = 3;
+        g.beginPath(); g.roundRect ? g.roundRect(-30, -30, 60, 74, 14) : g.rect(-30, -30, 60, 74); g.fill(); g.stroke();
+        g.fillStyle = '#2a1f3d'; [[-34, -18], [26, -18], [-34, 22], [26, 22]].forEach(([a, b2]) => g.fillRect(a, b2, 8, 16));
+        if (ready(petImg)) g.drawImage(petImg, -44, -62, 88, 73);
+        g.restore();
+      }
+      showTm(Math.max(0, Math.ceil((DUR - el) / 1000)));
+      if (el >= DUR || lives <= 0) { running = false; window.removeEventListener('keydown', onKey); finish(Math.min(score, MAX), MAX); return; }
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+    root._game = { get items() { return items; }, get lane() { return lane; }, set lane(v) { lane = v; }, LANES };
+    return { stop() { running = false; cancelAnimationFrame(raf); window.removeEventListener('keydown', onKey); } };
+  }
+
+  /* ---------- Salta nubes: rebotá de nube en nube hacia arriba ---------- */
+  function nubesGame(root, finish) {
+    root.innerHTML = `<div class="g-catch"><div class="g-top"><span>Altura <b class="sc">0</b></span><span>Tiempo <b class="tm">40</b></span></div>
+      <canvas class="g-canvas g-jump" width="360" height="420" aria-label="Juego: salta nubes"></canvas>
+      <p class="g-hint">Mantené apretado a la izquierda o a la derecha (o las flechas) para moverte.</p></div>`;
+    const cv = root.querySelector('canvas'), g = cv.getContext('2d');
+    const { W, H } = hiDPI(cv), DUR = 40000, MAX = 30, PW = 70, PH = 58;
+    const showSc = show(root.querySelector('.sc')), showTm = show(root.querySelector('.tm'));
+    const petImg = petImgOf('happy');
+    let clouds = [], px = W / 2, py = H - 120, vy = -0.75, steer = 0, cam = 0, best = 0, played = 0, last = performance.now(), running = true, raf = 0;
+    for (let i = 0; i < 9; i++) clouds.push({ x: 40 + Math.random() * (W - 80), y: H - 40 - i * 62, w: 74, n: i });
+    clouds[0].x = W / 2;
+    const GRAV = 0.0019, BOUNCE = -0.86;
+    const setSteer = (e) => { const r = cv.getBoundingClientRect(); steer = e.clientX - r.left < r.width / 2 ? -1 : 1; };
+    cv.addEventListener('pointerdown', (e) => { e.preventDefault(); setSteer(e); try { cv.setPointerCapture(e.pointerId); } catch (_) { /* nada */ } });
+    cv.addEventListener('pointermove', (e) => { if (e.buttons) setSteer(e); });
+    ['pointerup', 'pointercancel'].forEach((ev) => cv.addEventListener(ev, () => { steer = 0; }));
+    const kd = (e) => { if (e.key === 'ArrowLeft') { steer = -1; e.preventDefault(); } if (e.key === 'ArrowRight') { steer = 1; e.preventDefault(); } };
+    const ku = (e) => { if ((e.key === 'ArrowLeft' && steer < 0) || (e.key === 'ArrowRight' && steer > 0)) steer = 0; };
+    window.addEventListener('keydown', kd); window.addEventListener('keyup', ku);
+    cv.style.touchAction = 'none';
+    const end = () => { running = false; window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); finish(Math.min(best, MAX), MAX); };
+    function frame(now) {
+      if (!running) return;
+      if (now - last < 14) { raf = requestAnimationFrame(frame); return; }
+      const raw = Math.max(0, now - last), dt = Math.min(40, raw); last = now;
+      const el = (played += Math.min(250, raw));
+      px += steer * 0.32 * dt; if (px < -20) px = W + 20; if (px > W + 20) px = -20;
+      const vy0 = vy; vy += GRAV * dt; py += vy * dt;
+      // rebota sólo cayendo sobre una nube
+      if (vy > 0) for (const c of clouds) { if (vy0 >= 0 && Math.abs(px - c.x) < c.w / 2 + 12 && py >= c.y - 6 && py - vy * dt <= c.y + 4) { vy = BOUNCE; py = c.y - 6; if (c.n > best) { best = c.n; showSc(best); snd.play('good'); } break; } }
+      // la cámara sube cuando la mascota pasa de la mitad
+      const top = H * 0.42; if (py < top) { const d = top - py; py = top; clouds.forEach((c) => { c.y += d; }); cam += d; }
+      clouds = clouds.filter((c) => c.y < H + 30);
+      while (clouds.length < 9) { const hi = clouds.reduce((m, c) => Math.min(m, c.y), H), n = clouds.reduce((m, c) => Math.max(m, c.n), 0) + 1; clouds.push({ x: 40 + Math.random() * (W - 80), y: hi - 56 - Math.random() * 22, w: Math.max(50, 76 - n), n }); }
+      const sky = g.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, `hsl(${205 - Math.min(60, cam / 80)}, 85%, ${72 - Math.min(30, cam / 200)}%)`); sky.addColorStop(1, '#e6f6ff');
+      g.fillStyle = sky; g.fillRect(0, 0, W, H);
+      g.fillStyle = '#fff'; g.strokeStyle = 'rgba(42,31,61,.25)'; g.lineWidth = 2;
+      clouds.forEach((c) => { g.beginPath(); g.ellipse(c.x, c.y, c.w / 2, 11, 0, 0, Math.PI * 2); g.arc(c.x - c.w * 0.18, c.y - 6, 10, 0, Math.PI * 2); g.arc(c.x + c.w * 0.14, c.y - 8, 12, 0, Math.PI * 2); g.fill(); });
+      if (ready(petImg)) g.drawImage(petImg, px - PW / 2, py - PH + 8, PW, PH);
+      showTm(Math.max(0, Math.ceil((DUR - el) / 1000)));
+      if (py > H + 40 || el >= DUR) { end(); return; }
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+    root._game = { get clouds() { return clouds; }, get px() { return px; }, get py() { return py; }, get vy() { return vy; }, set steer(v) { steer = v; }, get best() { return best; } };
+    return { stop() { running = false; cancelAnimationFrame(raf); window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); } };
+  }
+
+  N.games = { catch: catchGame, guess: guessGame, memory: memoryGame, bubbles: bubblesGame, simon: simonGame, jump: jumpGame, gol: golGame, tateti: tatetiGame, topos: toposGame, pileta: piletaGame, carrera: carreraGame, nubes: nubesGame };
 })();

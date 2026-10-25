@@ -3,7 +3,7 @@
   'use strict';
   const N = (window.N = window.N || {});
   const MIN = 60e3, HOUR = 3600e3, DAY = 24 * HOUR;
-  N.APP = { name: 'Virtual Pet', version: '1.11.6', author: 'Facundo Bangher' };
+  N.APP = { name: 'Virtual Pet', version: '2.0.0', author: 'Facundo Bangher' };
 
   const SPECIES = {
     dragon: { name: 'Dragón', fav: 'Carne asada', egg: 'Huevo escamado', hint: 'Comilón: le da hambre seguido' },
@@ -41,29 +41,121 @@
     { id: 'style', name: 'Con estilo', desc: 'Comprá un accesorio', coins: 10, test: (s) => Object.keys(s.owned).length >= 1 },
     { id: 'collector', name: 'Coleccionista', desc: 'Comprá todos los accesorios', coins: 100, test: (s) => Object.keys(ITEMS).filter((k) => ITEMS[k].kind === 'wear').every((k) => s.owned[k]) },
     { id: 'arcade', name: 'Fichines', desc: 'Desbloqueá todos los minijuegos', coins: 60, test: (s) => Object.keys(GAMES).every((k) => !GAMES[k].price || (s.gamesOwned && s.gamesOwned[k])) },
-    { id: 'decor', name: 'Decorador', desc: 'Desbloqueá todos los fondos del cuarto', coins: 100, roomOnly: true, test: (s) => Object.keys(BACKGROUNDS).every((k) => s.bgOwned && s.bgOwned[k]) },
+    { id: 'decor', name: 'Viajero', desc: 'Desbloqueá todos los lugares de paseo', coins: 100, test: (s) => Object.keys(BACKGROUNDS).every((k) => s.bgOwned && s.bgOwned[k]) },
     { id: 'zoo', name: 'Zoológico', desc: 'Criá las 4 especies', coins: 100, test: (s) => Object.keys(s.stats.species).length >= 4 },
+    { id: 'gourmet', name: 'Gourmet', desc: 'Dale de probar 20 comidas distintas', coins: 50, test: (s) => Object.keys(s.stats.tried || {}).length >= 20 },
+    { id: 'garden', name: 'Huertero', desc: 'Cosechá 10 veces en el jardín', coins: 40, test: (s) => s.stats.harvests >= 10 },
+    { id: 'goals', name: 'Goleador', desc: 'Hacé 20 goles en el patio', coins: 30, test: (s) => s.stats.goals >= 20 },
+    { id: 'rooms', name: 'Recorrido', desc: 'Visitá todos los ambientes de la casa', coins: 20, test: (s) => ROOMS.every((r) => s.roomsSeen && s.roomsSeen[r]) },
   ];
+  // Ambientes de la casa (el orden es el de las flechas)
+  const ROOMS = ['cocina', 'bano', 'dormitorio', 'living', 'juegos', 'laboratorio', 'jardin', 'patio', 'paseo', 'garaje'];
   const isNight = (t) => { const h = new Date(t).getHours(); return h >= 22 || h < 7; };
   // Saludo según la hora (al despertarse): de 6 a 12 "Buenos días", de 12 a 20 "Buenas tardes" y si no "Buenas noches"
   const greeting = (t) => { const h = new Date(t == null ? Date.now() : t).getHours(); return h >= 6 && h < 12 ? 'Buenos días' : h >= 12 && h < 20 ? 'Buenas tardes' : 'Buenas noches'; };
 
-  /* Fondos del cuarto (celular). El primero es gratis; los demás se desbloquean con monedas. */
+  /* Lugares de paseo (el ambiente "Paseo" de la casa). El jardín es gratis; los demás se desbloquean con monedas.
+     ("cuarto" queda por las partidas viejas: era el fondo gratis del celular y ahora no se muestra.) */
   const BACKGROUNDS = {
-    cuarto: { name: 'Cuarto', price: 0, desc: 'Su habitación de siempre.' },
-    jardin: { name: 'Jardín', price: 60, desc: 'Pasto, flores y sol.', outdoor: true },
+    cuarto: { name: 'Cuarto', price: 0, desc: 'Su habitación de siempre.', hidden: true },
+    jardin: { name: 'Plaza', price: 0, desc: 'Pasto, flores y sol.', outdoor: true },
     playa: { name: 'Playa', price: 90, desc: 'Arena, mar y un velerito.', outdoor: true },
     bosque: { name: 'Bosque', price: 90, desc: 'Pinos, hojas y hongos.', outdoor: true },
     castillo: { name: 'Castillo', price: 150, desc: 'Antorchas y alfombra roja.' },
     volcan: { name: 'Volcán', price: 150, desc: 'Ideal para un dragón.', outdoor: true },
     espacio: { name: 'Espacio', price: 200, desc: 'Entre planetas y estrellas.' },
   };
+
+  /* Comida: muchas opciones, por categoría. [id, nombre, emoji, categoría, precio, cuánto llena, extras]
+     extras: health/fun/energy (suman o restan), react (cara especial al comer). */
+  const FOOD_CATS = { fruta: 'Frutas', verdura: 'Verduras', comida: 'Comidas', desayuno: 'Desayuno', dulce: 'Dulces', bebida: 'Bebidas' };
+  const FOODS = [
+    ['banana', 'Banana', '🍌', 'fruta', 4, 20, { energy: 3 }],
+    ['frutilla', 'Frutillas', '🍓', 'fruta', 5, 14, { fun: 3, health: 2 }],
+    ['sandia', 'Sandía', '🍉', 'fruta', 6, 22, { health: 2 }],
+    ['uvas', 'Uvas', '🍇', 'fruta', 5, 16, { health: 2 }],
+    ['naranja', 'Naranja', '🍊', 'fruta', 4, 18, { health: 3 }],
+    ['pera', 'Pera', '🍐', 'fruta', 4, 20, { health: 2 }],
+    ['durazno', 'Durazno', '🍑', 'fruta', 5, 18, { health: 2 }],
+    ['cereza', 'Cerezas', '🍒', 'fruta', 6, 12, { fun: 4 }],
+    ['anana', 'Ananá', '🍍', 'fruta', 7, 24, { health: 2 }],
+    ['kiwi', 'Kiwi', '🥝', 'fruta', 5, 15, { health: 3 }],
+    ['mango', 'Mango', '🥭', 'fruta', 7, 24, { fun: 2 }],
+    ['coco', 'Coco', '🥥', 'fruta', 8, 20, { fun: 3 }],
+    ['limon', 'Limón', '🍋', 'fruta', 3, 6, { fun: -2, health: 3, react: 'sour' }],
+    ['zanahoria', 'Zanahoria', '🥕', 'verdura', 3, 16, { health: 4 }],
+    ['choclo', 'Choclo', '🌽', 'verdura', 4, 22, { health: 2 }],
+    ['brocoli', 'Brócoli', '🥦', 'verdura', 4, 16, { health: 5, fun: -2 }],
+    ['tomate', 'Tomate', '🍅', 'verdura', 3, 14, { health: 3 }],
+    ['pepino', 'Pepino', '🥒', 'verdura', 3, 12, { health: 3 }],
+    ['lechuga', 'Lechuga', '🥬', 'verdura', 3, 10, { health: 4 }],
+    ['papa', 'Papa', '🥔', 'verdura', 3, 20, {}],
+    ['berenjena', 'Berenjena', '🍆', 'verdura', 4, 16, { health: 3 }],
+    ['palta', 'Palta', '🥑', 'verdura', 6, 22, { health: 4 }],
+    ['hongo', 'Hongo', '🍄', 'verdura', 5, 14, { health: 2 }],
+    ['aji', 'Ají picante', '🌶️', 'verdura', 4, 8, { fun: 10, react: 'spicy' }],
+    ['pizza', 'Pizza', '🍕', 'comida', 12, 40, { fun: 8, health: -3 }],
+    ['hamburguesa', 'Hamburguesa', '🍔', 'comida', 14, 45, { fun: 8, health: -4 }],
+    ['pancho', 'Pancho', '🌭', 'comida', 9, 30, { fun: 5, health: -2 }],
+    ['fritas', 'Papas fritas', '🍟', 'comida', 8, 25, { fun: 6, health: -3 }],
+    ['taco', 'Taco', '🌮', 'comida', 10, 32, { fun: 4 }],
+    ['burrito', 'Burrito', '🌯', 'comida', 11, 38, { fun: 3 }],
+    ['sandwich', 'Sándwich', '🥪', 'comida', 9, 32, {}],
+    ['fideos', 'Fideos', '🍝', 'comida', 10, 40, { health: 1 }],
+    ['sopa', 'Sopa de fideos', '🍜', 'comida', 10, 35, { health: 2 }],
+    ['sushi', 'Sushi', '🍣', 'comida', 15, 30, { health: 2, fun: 3 }],
+    ['curry', 'Arroz con curry', '🍛', 'comida', 12, 40, {}],
+    ['empanada', 'Empanada', '🥟', 'comida', 8, 30, { fun: 2 }],
+    ['pollo', 'Pollo', '🍗', 'comida', 12, 40, { health: 2 }],
+    ['carne', 'Carne', '🍖', 'comida', 13, 44, {}],
+    ['bife', 'Bife', '🥩', 'comida', 15, 48, {}],
+    ['langostino', 'Langostinos', '🍤', 'comida', 12, 26, { fun: 3 }],
+    ['queso', 'Queso', '🧀', 'comida', 6, 18, {}],
+    ['pan', 'Pan', '🍞', 'comida', 3, 18, {}],
+    ['pochoclo', 'Pochoclo', '🍿', 'comida', 6, 12, { fun: 8 }],
+    ['huevo', 'Huevo frito', '🍳', 'desayuno', 6, 24, { health: 2 }],
+    ['panqueques', 'Panqueques', '🥞', 'desayuno', 8, 30, { fun: 5 }],
+    ['medialuna', 'Medialuna', '🥐', 'desayuno', 5, 20, { fun: 3 }],
+    ['panceta', 'Panceta', '🥓', 'desayuno', 7, 22, { health: -1 }],
+    ['cereal', 'Cereal', '🥣', 'desayuno', 6, 24, { energy: 4 }],
+    ['miel', 'Miel', '🍯', 'desayuno', 6, 10, { fun: 6, energy: 5 }],
+    ['cumple', 'Torta de cumpleaños', '🎂', 'dulce', 20, 20, { fun: 35, health: -6 }],
+    ['cupcake', 'Cupcake', '🧁', 'dulce', 7, 10, { fun: 15, health: -3 }],
+    ['dona', 'Dona', '🍩', 'dulce', 6, 12, { fun: 14, health: -3 }],
+    ['galletita', 'Galletita', '🍪', 'dulce', 4, 8, { fun: 10, health: -1 }],
+    ['chocolate', 'Chocolate', '🍫', 'dulce', 6, 10, { fun: 16, health: -2 }],
+    ['caramelo', 'Caramelo', '🍬', 'dulce', 2, 3, { fun: 8, health: -1 }],
+    ['chupetin', 'Chupetín', '🍭', 'dulce', 3, 4, { fun: 12, health: -1 }],
+    ['helado', 'Helado', '🍦', 'dulce', 6, 10, { fun: 18, health: -2 }],
+    ['flan', 'Flan', '🍮', 'dulce', 7, 14, { fun: 12, health: -1 }],
+    ['agua', 'Agua', '💧', 'bebida', 2, 4, { health: 2 }],
+    ['leche', 'Leche', '🥛', 'bebida', 4, 12, { health: 3 }],
+    ['jugo', 'Jugo', '🧃', 'bebida', 5, 10, { fun: 4, health: 2 }],
+    ['licuado', 'Licuado', '🥤', 'bebida', 6, 12, { fun: 6 }],
+    ['te', 'Té', '🍵', 'bebida', 4, 6, { health: 2, energy: 4 }],
+    ['cafe', 'Café con leche', '☕', 'bebida', 5, 6, { energy: 15 }],
+  ];
+  // Semillas para la huerta del jardín: se riegan con la nube y en unas horas se cosechan
+  const SEEDS = {
+    sem_lechuga: { name: 'Semillas de lechuga', crop: 'lechuga', n: 3, grow: 2 * HOUR, price: 5 },
+    sem_zanahoria: { name: 'Semillas de zanahoria', crop: 'zanahoria', n: 3, grow: 2 * HOUR, price: 6 },
+    sem_tomate: { name: 'Semillas de tomate', crop: 'tomate', n: 3, grow: 3 * HOUR, price: 6 },
+    sem_papa: { name: 'Semillas de papa', crop: 'papa', n: 4, grow: 3 * HOUR, price: 6 },
+    sem_frutilla: { name: 'Semillas de frutilla', crop: 'frutilla', n: 4, grow: 4 * HOUR, price: 10 },
+    sem_choclo: { name: 'Semillas de choclo', crop: 'choclo', n: 3, grow: 4 * HOUR, price: 8 },
+    sem_sandia: { name: 'Semillas de sandía', crop: 'sandia', n: 2, grow: 6 * HOUR, price: 12 },
+  };
+  const PLOTS = 5, WET_MS = 3 * HOUR;
   const ITEMS = {
-    fruit: { name: 'Fruta', price: 5, kind: 'food', food: 25, health: 2, desc: 'Llena un poco y es sana.' },
-    fav: { name: 'Su comida favorita', price: 12, kind: 'food', food: 45, fun: 10, desc: 'Llena mucho y lo pone contento.' },
-    cake: { name: 'Torta', price: 8, kind: 'food', food: 12, fun: 22, health: -4, desc: 'Lo divierte, pero no es sana.' },
+    fruit: { name: 'Manzana', price: 5, kind: 'food', cat: 'fruta', food: 25, health: 2, desc: 'Llena bastante y es sana.' },
+    fav: { name: 'Su comida favorita', price: 12, kind: 'food', cat: 'comida', food: 45, fun: 10, desc: 'Llena mucho y lo pone contento.' },
+    cake: { name: 'Torta', price: 8, kind: 'food', cat: 'dulce', food: 12, fun: 22, health: -4, desc: 'Lo divierte, pero no es sana.' },
     medicine: { name: 'Remedio', price: 15, kind: 'med', cure: true, health: 20, desc: 'Cura la enfermedad.' },
     vitamins: { name: 'Vitaminas', price: 20, kind: 'med', health: 35, desc: 'Recupera salud.' },
+    p_energia: { name: 'Poción de energía', price: 25, kind: 'med', potion: '#ffc93c', energy: 45, desc: 'Lo despabila sin dormir: +45 de energía.' },
+    p_alegria: { name: 'Poción de alegría', price: 22, kind: 'med', potion: '#ff5d9e', fun: 45, desc: 'Lo pone contento: +45 de diversión.' },
+    p_limpieza: { name: 'Poción de limpieza', price: 18, kind: 'med', potion: '#20b5a8', hygiene: 100, desc: 'Queda limpito sin bañarlo.' },
+    p_llenura: { name: 'Poción de llenura', price: 25, kind: 'med', potion: '#ff8a3d', food: 50, desc: 'Llena la panza: +50 de comida.' },
     hat: { name: 'Gorrito de fiesta', price: 40, kind: 'wear', desc: 'Para los cumpleaños.' },
     bow: { name: 'Moño', price: 30, kind: 'wear', desc: 'Un toque elegante.' },
     scarf: { name: 'Bufanda', price: 35, kind: 'wear', desc: 'Para el invierno.' },
@@ -73,9 +165,28 @@
     cap: { name: 'Gorra', price: 60, kind: 'wear', desc: 'Con visera, para el sol.' },
     headphones: { name: 'Auriculares', price: 90, kind: 'wear', desc: 'Para escuchar música.' },
     wizard: { name: 'Gorro de mago', price: 160, kind: 'wear', desc: 'Con estrellas mágicas.' },
+    beanie: { name: 'Gorro de lana', price: 40, kind: 'wear', desc: 'Calentito, con pompón.' },
+    tiara: { name: 'Tiara', price: 100, kind: 'wear', desc: 'Con brillantes.' },
+    cowboy: { name: 'Sombrero de vaquero', price: 80, kind: 'wear', desc: 'Para el lejano oeste.' },
+    bandana: { name: 'Vincha deportiva', price: 35, kind: 'wear', desc: 'Para hacer deporte.' },
   };
+  FOODS.forEach(([id, name, emoji, cat, price, food, x]) => { ITEMS[id] = Object.assign({ name, emoji, cat, price, kind: 'food', food, desc: '' }, x); });
+  Object.keys(SEEDS).forEach((id) => { const sd = SEEDS[id]; ITEMS[id] = { name: sd.name, price: sd.price, kind: 'seed', seed: true, desc: `Se cosechan ${sd.n} en unas ${Math.round(sd.grow / HOUR)} h si la regás.` }; });
+  // Descripción de cada comida, armada con lo que hace
+  Object.keys(ITEMS).forEach((id) => {
+    const it = ITEMS[id];
+    if (it.kind !== 'food' || it.desc) return;
+    const bits = [`Llena ${it.food}`];
+    if (it.fun > 0) bits.push(`divierte +${it.fun}`); if (it.fun < 0) bits.push('no le encanta');
+    if (it.health > 0) bits.push('es sana'); if (it.health < 0) bits.push('no es sana');
+    if (it.energy > 0) bits.push(`da energía +${it.energy}`);
+    if (it.react === 'spicy') bits.push('¡pica!'); if (it.react === 'sour') bits.push('¡es ácido!');
+    it.desc = bits.join(', ').replace(/^./, (c) => c.toUpperCase()).replace(/([^!])$/, '$1.');
+  });
+  const FOOD_IDS = Object.keys(ITEMS).filter((k) => ITEMS[k].kind === 'food').sort((a, b) => Object.keys(FOOD_CATS).indexOf(ITEMS[a].cat) - Object.keys(FOOD_CATS).indexOf(ITEMS[b].cat));
+  const MEDS = ['medicine', 'vitamins', 'p_energia', 'p_alegria', 'p_limpieza', 'p_llenura'];
   // Orden en que se muestran los accesorios en la tienda
-  const WEAR = ['bow', 'scarf', 'hat', 'flower', 'glasses', 'cap', 'headphones', 'crown', 'wizard'];
+  const WEAR = ['bow', 'bandana', 'scarf', 'hat', 'beanie', 'flower', 'glasses', 'cap', 'cowboy', 'headphones', 'tiara', 'crown', 'wizard'];
 
   /* Minijuegos: los primeros son gratis; los demás se desbloquean con monedas. */
   const GAMES = {
@@ -83,8 +194,26 @@
     guess: { name: '¿Para dónde mira?', price: 0 },
     memory: { name: 'Memoria', price: 0 },
     bubbles: { name: 'Burbujas', price: 0 },
+    gol: { name: 'Penales', price: 0 },
+    tateti: { name: 'Ta-te-tí', price: 0 },
     simon: { name: 'Simón dice', price: 80 },
+    topos: { name: 'Topos', price: 60 },
+    pileta: { name: 'Pileta', price: 90 },
+    carrera: { name: 'Carrera', price: 100 },
     jump: { name: 'Salto', price: 120 },
+    nubes: { name: 'Salta nubes', price: 140 },
+  };
+  /* Cosas para hacer en cada ambiente (sin minijuego): suben un poco la diversión.
+     cd = cada cuánto se puede repetir (para que no sea una fuente infinita). */
+  const TOYS = {
+    ball: { fun: 3, energy: -0.5, cd: 1200 },          // cuarto de juegos: pelota
+    music: { fun: 6, energy: -1, cd: 60e3 },           // living: bailar con música
+    tv: { fun: 4, energy: 1, cd: 60e3 },               // living: mirar la tele (descansa un poquito)
+    kick: { fun: 2, energy: -0.5, cd: 1200 },          // patio: patear al arco
+    soap: { hygiene: 3, fun: 1, cd: 700 },             // baño: jabón
+    paseo: { fun: 12, energy: -3, cd: 20 * MIN },      // paseo: salir a pasear
+    rain: { fun: 2, cd: 30 * MIN },                    // jardín: le gusta la lluvia
+    swing: { fun: 5, energy: -1, cd: 30e3 },           // patio: hamaca
   };
 
   /* Paquetes de monedas que se compran con dinero real (sólo en la app de Android, con Google Play).
@@ -98,7 +227,7 @@
   // Reglas (por hora de juego). Ajustables en un solo lugar.
   const R = {
     startCoins: 60,
-    startInv: { fruit: 3, fav: 1, medicine: 1 },
+    startInv: { fruit: 3, fav: 1, banana: 2, zanahoria: 2, pan: 2, leche: 2, galletita: 2, medicine: 1, sem_zanahoria: 1, sem_lechuga: 1 },
     stageMul: { baby: 1.15, young: 1.05, adult: 1.0 },
     // Crecimiento por nivel (y una edad mínima, para que no crezca en minutos)
     lvYoung: 5, lvAdult: 20, maxLevel: 100,
@@ -129,7 +258,8 @@
   /* --------- estado --------- */
   function freshState() {
     return {
-      v: 1, coins: R.startCoins, inv: Object.assign({}, R.startInv), owned: {}, wearing: null, bgOwned: { cuarto: true }, bg: 'cuarto', gamesOwned: {}, purchases: {},
+      v: 2, coins: R.startCoins, inv: Object.assign({}, R.startInv), owned: {}, wearing: null, bgOwned: { cuarto: true, jardin: true }, bg: 'jardin', gamesOwned: {}, purchases: {},
+      room: 'living', roomsSeen: {}, toyAt: {}, garden: { plots: Array(PLOTS).fill(null) }, news: 0,
       daily: { last: null, streak: 0 }, pet: null, lockUntil: 0, memorial: [],
       settings: { sound: true, follow: false, notify: true, wander: true, onTop: true, saver: false },
       lastSeen: now(), totalGames: 0,
@@ -137,7 +267,7 @@
     };
   }
   function freshStats() {
-    return { hatched: 0, grewYoung: 0, grewAdult: 0, shiny: 0, maxLevel: 0, maxAgeDays: 0, feeds: 0, baths: 0, cleans: 0, cures: 0, games: 0, species: {} };
+    return { hatched: 0, grewYoung: 0, grewAdult: 0, shiny: 0, maxLevel: 0, maxAgeDays: 0, feeds: 0, baths: 0, cleans: 0, cures: 0, games: 0, species: {}, tried: {}, harvests: 0, goals: 0 };
   }
 
   function newPet(species, name) {
@@ -174,6 +304,7 @@
   function migrate(st) {
     const f = freshState();
     const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+    const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
     st.settings = Object.assign(f.settings, obj(st.settings));
     st.stats = Object.assign(freshStats(), obj(st.stats));
     st.stats.species = obj(st.stats.species);
@@ -186,11 +317,29 @@
     st.album = st.album.filter((ph) => ph && SPECIES[ph.species]);
     st.daily = Object.assign({ last: null, streak: 0 }, obj(st.daily));
     if (typeof st.daily.streak !== 'number' || !(st.daily.streak >= 0)) st.daily.streak = 0;
-    st.bgOwned = Object.assign({ cuarto: true }, obj(st.bgOwned));
-    if (!BACKGROUNDS[st.bg] || !st.bgOwned[st.bg]) st.bg = 'cuarto';
-    const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
+    st.bgOwned = Object.assign({ cuarto: true, jardin: true }, obj(st.bgOwned));
+    Object.keys(st.bgOwned).forEach((k) => { if (!BACKGROUNDS[k]) delete st.bgOwned[k]; });
+    if (!BACKGROUNDS[st.bg] || !st.bgOwned[st.bg] || BACKGROUNDS[st.bg].hidden) st.bg = 'jardin';
+    st.stats.tried = obj(st.stats.tried);
+    ['harvests', 'goals'].forEach((k) => { if (typeof st.stats[k] !== 'number' || !(st.stats[k] >= 0)) st.stats[k] = 0; });
+    if (!ROOMS.includes(st.room)) st.room = 'living';
+    st.roomsSeen = obj(st.roomsSeen); st.toyAt = obj(st.toyAt);
+    // Partidas de antes de la casa (versión 1): un regalo de bienvenida con comida nueva y semillas, y la ventana de novedades
+    if (!(st.v >= 2)) {
+      st.v = 2;
+      if (st.pet || (st.memorial && st.memorial.length)) {
+        st.news = 2;
+        [['banana', 2], ['pizza', 1], ['helado', 1], ['zanahoria', 2], ['leche', 2], ['sem_zanahoria', 1], ['sem_frutilla', 1]].forEach(([k, n]) => { st.inv[k] = (st.inv[k] || 0) + n; });
+      }
+    }
+    st.news = st.news === 2 ? 2 : 0;
+    // huerta: 5 canteros; los que tienen datos raros quedan vacíos
+    const g = obj(st.garden);
+    const plots = Array.isArray(g.plots) ? g.plots.slice(0, PLOTS) : [];
+    while (plots.length < PLOTS) plots.push(null);
+    st.garden = { plots: plots.map((pl) => (pl && typeof pl === 'object' && SEEDS[pl.seed] ? { seed: pl.seed, grown: Math.max(0, num(pl.grown, 0)), last: num(pl.last, now()), wetUntil: num(pl.wetUntil, 0) } : null)) };
     st.coins = Math.max(0, Math.floor(num(st.coins, R.startCoins)));
-    Object.keys(st.inv).forEach((k) => { st.inv[k] = Math.max(0, Math.floor(num(st.inv[k], 0))); });
+    Object.keys(st.inv).forEach((k) => { if (!ITEMS[k] || ITEMS[k].kind === 'wear') { delete st.inv[k]; return; } st.inv[k] = Math.max(0, Math.floor(num(st.inv[k], 0))); });
     if (st.wearing && !st.owned[st.wearing]) st.wearing = null;
     st.lockUntil = num(st.lockUntil, 0);
     // ya no hay espera después de una muerte: una partida vieja que estaba esperando queda libre
@@ -566,8 +715,8 @@
       const f = p.food, xp = f < 50 ? 8 : f < 80 ? 3 : 0;
       const n = Math.ceil((100 - f) / ITEMS.fruit.food);
       mk('food', f >= 96 ? 'Está lleno.' : sleeping ? 'Cuando se despierte, dale de comer.'
-        : `Dale de comer: una fruta llena ${ITEMS.fruit.food}% y su comida favorita ${ITEMS.fav.food}%` + (f < 80 ? ` (para llenarlo: ${n} fruta${n > 1 ? 's' : ''}).` : '.')
-        + (!inv('fruit') && !inv('fav') ? ' No te queda comida: comprá en la tienda.' : ''), xp,
+        : `Dale de comer en la cocina: una manzana llena ${ITEMS.fruit.food}%, su comida favorita ${ITEMS.fav.food}% y una hamburguesa ${ITEMS.hamburguesa.food}%` + (f < 80 ? ` (para llenarlo: ${n} manzana${n > 1 ? 's' : ''}).` : '.')
+        + (!FOOD_IDS.some((k) => inv(k)) ? ' No te queda comida: comprá en la tienda o cosechá en el jardín.' : ''), xp,
       { xpText: f < 50 ? 'Con hambre (menos de 50%) suma 8 puntos, 10 con su favorita' : f < 80 ? 'Ahora suma 3 puntos; con hambre (menos de 50%) suma 8' : 'Con hambre (menos de 50%) suma 8 puntos' });
     }
     // energía
@@ -668,6 +817,22 @@
     return { coins, streak, bonus, nextCoins: 20 + 5 * Math.min(streak, 6) };
   }
 
+  /* --------- huerta --------- */
+  // Lo que creció un cantero: sólo crece mientras la tierra está mojada
+  function growPlot(pl, t) {
+    const b = Math.min(t, pl.wetUntil);
+    if (b > pl.last) pl.grown += b - pl.last;
+    if (t > pl.last) pl.last = t;
+  }
+  function plotState(pl, t) {
+    if (!pl) return null;
+    t = t || now();
+    const q = { grown: pl.grown, last: pl.last, wetUntil: pl.wetUntil };
+    growPlot(q, t);
+    const sd = SEEDS[pl.seed], pct = Math.min(1, q.grown / sd.grow);
+    return { seed: pl.seed, crop: sd.crop, pct, ripe: pct >= 1, wet: pl.wetUntil > t, left: Math.max(0, sd.grow - q.grown), wetLeft: Math.max(0, pl.wetUntil - t) };
+  }
+
   /* --------- acciones --------- */
   const ok = (msg, extra) => Object.assign({ ok: true, msg }, extra || {});
   const no = (msg) => ({ ok: false, msg });
@@ -703,15 +868,19 @@
       if (!it || it.kind !== 'food') return no('Eso no se come.');
       if (p.sleeping) return no('Está durmiendo. Despertalo primero.');
       if ((S.inv[itemId] || 0) <= 0) return no('No te queda. Comprá en la tienda.');
-      if (p.food >= 96 && itemId !== 'cake') return no('¡Estoy lleno!');
+      // lleno: igual acepta dulces y bebidas (un postre siempre entra)
+      if (p.food >= 96 && it.cat !== 'dulce' && it.cat !== 'bebida') return no('¡Estoy lleno!');
       S.inv[itemId]--;
       const f0 = p.food;
       p.food = clamp(p.food + it.food);
       if (it.fun) p.fun = clamp(p.fun + it.fun);
       if (it.health) p.health = clamp(p.health + it.health);
+      if (it.energy) p.energy = clamp(p.energy + it.energy);
       p.digest += it.food;
       S.stats.feeds++;
-      const r = done(ok('¡Ñam!', { anim: 'eat' }));
+      S.stats.tried[itemId] = 1;
+      const msg = it.react === 'spicy' ? '¡Pica, pica, pica!' : it.react === 'sour' ? '¡Uy, qué ácido!' : pick(['¡Ñam!', '¡Qué rico!', '¡Mmm!', '¡Ñam ñam!']);
+      const r = done(ok(msg, { anim: 'eat', react: it.react || null }));
       gain(f0 < 50 ? (itemId === 'fav' ? 10 : 8) : f0 < 80 ? 3 : 0);
       return r;
     },
@@ -721,15 +890,82 @@
       if (!it || it.kind !== 'med') return no('');
       if ((S.inv[itemId] || 0) <= 0) return no('No te queda. Comprá en la tienda.');
       if (it.cure && !p.sick) return no('No está enfermo. Guardá el remedio para cuando lo necesite.');
-      if (!it.cure && p.health >= 98) return no('Ya tiene la salud completa.');
+      if (!it.cure && it.health && p.health >= 98) return no('Ya tiene la salud completa.');
+      // pociones: sólo si de verdad le hace falta (y despierto)
+      if (it.potion) {
+        if (p.sleeping) return no('Está durmiendo. Despertalo primero.');
+        const k = ['energy', 'fun', 'hygiene', 'food'].find((x) => it[x]);
+        if (p[k] >= 95) return no({ energy: '¡Tengo energía de sobra!', fun: '¡Ya estoy re contento!', hygiene: 'Ya está limpito.', food: '¡Estoy lleno!' }[k]);
+      }
       S.inv[itemId]--;
       const weak = p.health < 60;
       if (it.cure) { p.sick = false; S.stats.cures++; }
-      p.health = clamp(p.health + it.health);
-      const r = done(ok(it.cure ? '¡Se curó!' : '¡Más fuerte!', { anim: 'happy' }));
-      gain(it.cure ? 15 : weak ? 5 : 0);
+      if (it.health) p.health = clamp(p.health + it.health);
+      ['energy', 'fun', 'hygiene', 'food'].forEach((k) => { if (it[k]) p[k] = clamp(p[k] + it[k]); });
+      const r = done(ok(it.cure ? '¡Se curó!' : it.potion ? '¡Glu, glu!' : '¡Más fuerte!', { anim: 'happy' }));
+      gain(it.cure ? 15 : it.health && weak ? 5 : 0);
       return r;
     },
+    /* Cosas para hacer en los ambientes (pelota, música, tele, patear al arco, jabón, pasear…).
+       Suben un poco la diversión; cada una se puede repetir cada tanto. extra: { goal: true } en el arco. */
+    toy(kind, extra) {
+      const p = S.pet, ty = TOYS[kind];
+      if (!ty) return no('');
+      if (!alive() || p.stage === 'egg') return no('');
+      if (p.sleeping) return no('Está durmiendo.');
+      if (p.sick && kind !== 'tv' && kind !== 'soap') return no('Está enfermo, no tiene ganas.');
+      if ((ty.energy || 0) < 0 && p.energy < 6) return no('Está muy cansado.');
+      const t = now(), last = S.toyAt[kind] || 0;
+      if (t - last < ty.cd && t >= last) return no('');
+      S.toyAt[kind] = t;
+      ['fun', 'energy', 'hygiene'].forEach((k) => { if (ty[k]) p[k] = clamp(p[k] + ty[k]); });
+      if (kind === 'kick' && extra && extra.goal) S.stats.goals++;
+      const r = done(ok('', { anim: 'happy' }));
+      if (t - (p.lastPetXP || 0) > 10 * MIN && p.fun < 90) { p.lastPetXP = t; gain(1); }
+      return r;
+    },
+    // Huerta: plantar una semilla en un cantero vacío
+    plant(i, seedId) {
+      const g = S.garden, sd = SEEDS[seedId];
+      if (!sd || !(i >= 0 && i < PLOTS)) return no('');
+      if (g.plots[i]) return no('Ese cantero ya tiene algo plantado.');
+      if ((S.inv[seedId] || 0) <= 0) return no('No tenés esas semillas. Compralas en la tienda.');
+      S.inv[seedId]--;
+      const t = now();
+      g.plots[i] = { seed: seedId, grown: 0, last: t, wetUntil: 0 };
+      return done(ok('¡Plantado! Regá con la nube para que crezca.'));
+    },
+    // La nube riega todos los canteros: crecen mientras la tierra está mojada (3 horas)
+    water() {
+      const g = S.garden, t = now();
+      const any = g.plots.some((pl) => pl);
+      if (!any) return no('Primero plantá alguna semilla.');
+      g.plots.forEach((pl) => { if (pl) { growPlot(pl, t); pl.wetUntil = t + WET_MS; } });
+      let fun = false;
+      if (alive() && S.pet.stage !== 'egg' && !S.pet.sleeping) fun = A.toy('rain').ok;
+      return done(ok('¡A regar!', { fun }));
+    },
+    harvest(i) {
+      const g = S.garden, pl = g.plots[i];
+      if (!pl) return no('');
+      const st = plotState(pl);
+      if (!st.ripe) return no(st.wet ? 'Todavía está creciendo.' : 'Le falta agua: regá con la nube.');
+      const sd = SEEDS[pl.seed];
+      g.plots[i] = null;
+      S.inv[sd.crop] = (S.inv[sd.crop] || 0) + sd.n;
+      S.stats.harvests++;
+      const r = done(ok(`¡Cosechaste ${sd.n} ${ITEMS[sd.crop].name.toLowerCase()}!`, { crop: sd.crop, n: sd.n }));
+      if (alive() && S.pet.stage !== 'egg') gain(3);
+      return r;
+    },
+    // Ambiente de la casa donde está (se guarda para volver al mismo al abrir)
+    setRoom(room) {
+      if (!ROOMS.includes(room)) return no('');
+      S.room = room;
+      if (!S.roomsSeen[room]) { S.roomsSeen[room] = 1; checkAchievements(); }
+      return ok('');
+    },
+    seenNews() { S.news = 0; save(); return ok(''); },
     bath() {
       const p = S.pet;
       if (!alive() || p.stage === 'egg') return no('');
@@ -927,7 +1163,7 @@
   }
 
   N.core = {
-    SPECIES, ITEMS, BACKGROUNDS, GAMES, PACKS, WEAR, R, HOUR, MIN, DAY, predict, ASKS,
+    SPECIES, ITEMS, BACKGROUNDS, GAMES, PACKS, WEAR, R, FOOD_CATS, FOOD_IDS, MEDS, SEEDS, ROOMS, TOYS, PLOTS, WET_MS, plotState, HOUR, MIN, DAY, predict, ASKS,
     load, save, resume, tick, advance, step, claimDaily, dailyPending,
     mood, needs, greeting, ageText, xpNeed, advice, xpTip, dur, addXP, isNight, exportState, importState, ACHIEVEMENTS, TRAITS, checkAchievements, stageName, careAvg, isLocked, dayKey, newPet, freshState,
     get state() { return S; },

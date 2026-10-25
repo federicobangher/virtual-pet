@@ -12,15 +12,15 @@
   const BUB = 70;   // espacio arriba de la mascota para el globito
   const TAG = 26;   // espacio abajo para el nombre
   const MINW = 290; // ancho mínimo de la ventana compacta (para que entre el globito)
-  const CARD_W = 360;
+  const CARD_W = 392;
   // Alto máximo del panel. Antes ocupaba casi toda la pantalla (alto del monitor − 16 px): en Windows, con
   // escalas distintas o la barra de tareas arriba, la parte de arriba (con la X y la flecha de volver)
   // podía quedar fuera de la pantalla y no había forma de cerrarlo.
-  const CARD_MAXH = 600;
+  const CARD_MAXH = 720;
   const cardMaxH = () => Math.max(260, Math.min(CARD_MAXH, wa.height - 40));
 
   const host = { kind: 'desktop' };
-  let E = {}, view;
+  let E = {}, view, house = null;
   // Varios monitores: la mascota pasea por todos. "areas" son las áreas de trabajo de cada monitor (sin la barra
   // de tareas), "wa" es la del monitor donde está la mascota ahora y "primary" la del monitor principal.
   let areas = [{ x: 0, y: 0, width: 1280, height: 720 }];
@@ -89,7 +89,7 @@
     hitsQueued = false;
     const rects = [];
     if (!hiddenAll) {
-      if (!E.pet.hidden) rects.push(rectOf(E.hit));
+      if (!E.pet.hidden && !cardOpen) rects.push(rectOf(E.hit));
       if (!E.bubble.hidden && E.bubble.classList.contains('ask')) rects.push(rectOf(E.bubble));
       const ni = E.pet.querySelector('.needicon:not([hidden])'); if (ni) rects.push(rectOf(ni));
       if (cardOpen && !E.card.hidden) rects.push(rectOf(E.card));
@@ -151,7 +151,12 @@
     if (cardOpen && cardPos) { sl(E.card, 'left', cardPos.x - b.x); sl(E.card, 'top', cardPos.y - b.y); }
     if (moved) queueHits(); // (caminando se mueve la ventana entera: las zonas tocables no cambian)
   }
-  function applyCardMax() { const v = cardMaxH() + 'px'; if (E.card.style.maxHeight !== v) { E.card.style.maxHeight = v; E.card.style.setProperty('--card-maxh', v); } } // (los juegos se achican para entrar sin desplazar)
+  function applyCardMax() {
+    const v = cardMaxH() + 'px'; if (E.card.style.maxHeight !== v) { E.card.style.maxHeight = v; E.card.style.setProperty('--card-maxh', v); } // (los juegos se achican para entrar sin desplazar)
+    // la casa ocupa todo el panel: su alto es fijo (el del panel menos el título y el pie)
+    const hv = Math.max(320, cardMaxH() - (E.head.offsetHeight || 44) - (E.foot.offsetHeight || 60) - 10) + 'px';
+    if (E.panel.style.height !== hv) E.panel.style.height = hv;
+  }
   // Windows a veces no deja la ventana exactamente donde se pidió (monitores con distinta escala, ventana más
   // alta que la pantalla). Electron avisa dónde quedó de verdad y acá se reacomoda todo adentro, y si el panel
   // igual quedara cortado, se lo trae a la parte visible del monitor.
@@ -176,7 +181,7 @@
       <div class="dcard" hidden role="dialog" aria-label="Virtual Pet">
         <div class="dcard-head"><span class="brand">Virtual Pet</span><button type="button" class="dclose" aria-label="Cerrar panel">${UI.ic('close')}</button></div>
         <div class="dcard-body"><div class="dpanel"></div><div class="dsheet" hidden><div class="dsheet-head"><button type="button" class="dback" aria-label="Volver">${UI.ic('back')}</button><h3></h3></div><div class="dsheet-body"></div></div><div class="dmodal" hidden></div></div>
-        <div class="dcard-foot"><button type="button" class="btn dclose2">${UI.ic('close')} Cerrar el panel</button></div>
+        <div class="dcard-foot"><button type="button" class="btn dclose2">${UI.ic('back')} Salir al escritorio</button></div>
       </div>`;
     E = {
       pet: app.querySelector('.dpet'), svg: app.querySelector('.dsvg'), hit: app.querySelector('.hit'), bubble: app.querySelector('.bubble'), tag: app.querySelector('.dtag'),
@@ -186,6 +191,11 @@
     };
     view = new UI.PetView(E.svg);
     startAnim();
+    // La casa vive adentro del panel: cuando lo abrís, la mascota "entra" a la casa (y desaparece del escritorio);
+    // cuando lo cerrás, vuelve a salir donde estaba.
+    house = N.House(E.panel, { compact: true, covered: () => !E.sheet.hidden || !E.modal.hidden });
+    house.pause(true);
+    host.house = house;
 
     // si el contenido del panel cambia de alto, acomodar la ventana
     if (window.ResizeObserver) new ResizeObserver(() => {
@@ -259,7 +269,8 @@
 
     // posición del mouse: sólo llega con "Que me siga el mouse" prendido
     D.onCursor((p) => {
-      cursor.x = p.x; cursor.y = p.y;
+      cursor.x = p.x; cursor.y = p.y; cursor.t = performance.now();
+      if (petAnim) petAnim.kick();
       if (C.state.settings.follow) wake();
     });
     // cualquier cambio de tamaño adentro (globito, ícono, panel) actualiza las zonas tocables
@@ -346,6 +357,8 @@
     if (cardOpen) { relayoutCard(); return; }
     cardOpen = true; fixTries = 0;
     E.card.hidden = false;
+    E.pet.classList.add('in-house'); E.bubble.hidden = true;
+    if (house) { house.pause(false); house.update(); }
     applyCardMax();
     placeCardAuto(); layout(); relayoutCard();
     // (no se le roba el foco a lo que estés usando: antes, una ventana automática como el premio diario o
@@ -358,18 +371,25 @@
     cardPos = null;
     cardMoved = false;
     E.card.hidden = true;
+    E.pet.classList.remove('in-house');
+    if (house) house.pause(true);
+    view.render(true);
     layout();
     queueHits();
     wake();
   }
 
   host.panelRoot = () => E.panel;
-  host.petBox = () => E.pet;
-  host.view = () => view;
+  // con la casa abierta, todo (globitos, efectos, ícono de pedidos) pasa adentro de la casa
+  const inHouse = () => !!(house && cardOpen);
+  host.petBox = () => (inHouse() ? house.petBox() : E.pet);
+  host.view = () => (inHouse() ? house.view : view);
 
   let bubbleT = 0;
   host.bubble = function (text, ms, warn, action) {
+    if (inHouse()) { house.bubble(text, ms, warn, action); return; }
     if (hiddenAll) return;
+    view.talk(Math.min(1800, 300 + String(text).length * 55));
     E.bubble.textContent = '';
     E.bubble.append(Object.assign(document.createElement('span'), { textContent: text }));
     E.bubble.classList.toggle('ask', !!action);
@@ -427,11 +447,12 @@
   host.saveFile = (name, text) => D.saveFile(name, text);
   host.quit = () => { C.save(); D.quit(); };
   host.uninstall = () => { C.save(); D.uninstall && D.uninstall(); };
-  host.onClean = () => syncPoops(true);
-  host.onPetEvent = (e) => { if (e.type === 'poop') syncPoops(true); if (e.type === 'hatch' || e.type === 'grow') { measure(); layout(); } wake(); };
+  host.onClean = () => { syncPoops(true); if (house) house.onClean(); };
+  host.onPetEvent = (e) => { if (e.type === 'poop') syncPoops(true); if (e.type === 'hatch' || e.type === 'grow') { measure(); layout(); } if (house) house.onPetEvent(e); wake(); };
   // cuando pide algo, se queda quieta mirando hasta que la atiendan (o un ratito)
   let seek = null, lastSeek = -1e9;
   host.onAsk = (need, action) => {
+    if (inHouse()) { house.onAsk(need); return; }
     target = null; idleUntil = performance.now() + 7000;
     if (!need || need.level !== 2) return;
     // si no está siempre visible, en un pedido urgente se asoma por delante de las ventanas
@@ -449,13 +470,14 @@
       wake();
     }).catch(() => {});
   };
-  host.isIdle = () => !walking && mode === 'free' && !drag && !cardOpen && !target;
+  host.isIdle = () => (inHouse() ? house.isIdle() : !walking && mode === 'free' && !drag && !cardOpen && !target);
   host.onReset = () => {
     try { localStorage.removeItem(PREF_KEY); } catch (e) {}
     E.bubble.hidden = true;
     measure();
     wa = primary; pos.x = primary.x + primary.width - size.w - 180; pos.y = floorOf(primary); mode = 'free'; target = null;
     syncPoops(true); syncTray(); layout();
+    if (house) house.onReset();
   };
   host.onSetting = (k, v) => { if (k === 'autostart') D.setAutostart(v); if (k === 'onTop') D.setOnTop(v); syncTray(); wake(); };
 
@@ -635,9 +657,16 @@
      En vez de dejar que Chromium anime a 60 cuadros por segundo, la mascota se anima con un reloj propio:
      10 cuadros por segundo caminando, 4 quieta y 2 dormida. Se ve igual de viva y la CPU casi ni se entera. */
   let petAnim = null;
+  // en el escritorio también mira al puntero cuando el mouse pasa cerca (llega con la posición del mouse)
+  function deskLook() {
+    if (cursor.x < 0 || !cursor.t || performance.now() - cursor.t > 2600) return null;
+    const svg = E.svg && E.svg.firstElementChild; if (!svg) return null;
+    const k = 240 / size.w; // píxeles de pantalla → coordenadas del dibujo
+    return { x: (cursor.x - pos.x) * k - 20, y: (cursor.y - pos.y) * k, t: cursor.t };
+  }
   function startAnim() {
     // con el panel abierto la ventana es grande: cada cuadro cuesta más, así que la mascota se anima más despacio
-    petAnim = N.petAnim({ svg: () => (hiddenAll ? null : E.svg && E.svg.firstElementChild), view: () => view, ms: { active: 100, idle: 250, sleep: 500, egg: 125 }, slow: () => cardOpen, saver: () => !!C.state.settings.saver });
+    petAnim = N.petAnim({ svg: () => (hiddenAll || cardOpen ? null : E.svg && E.svg.firstElementChild), view: () => view, look: deskLook, ms: { active: 100, idle: 200, sleep: 500, egg: 125 }, saver: () => !!C.state.settings.saver });
     view.onSvg = () => petAnim.kick();
   }
 
