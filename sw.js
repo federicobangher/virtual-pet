@@ -1,5 +1,5 @@
 /* Virtual Pet — service worker: guarda el juego para que funcione sin internet. */
-const VERSION = 'vpet-v2.0.0';
+const VERSION = 'vpet-v2.0.1';
 const FILES = [
   './', './index.html', './manifest.webmanifest',
   './css/pet.css', './css/style.css', './css/house.css',

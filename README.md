@@ -17,6 +17,10 @@ Si te queda poca batería, en el menú (☰) → *Ajustes* está el **modo ahorr
 
 Para ver la tienda con compras de prueba (no cobra nada), agregá `?tienda=demo` al final de la dirección.
 
+## Windows y el APK
+
+La versión para Windows (`.msi`) y la app de Android para instalar directo (`.apk`) se actualizan solas desde esta página: leen `update.json` (la versión y una huella SHA-256 de cada archivo), bajan lo que cambió, lo verifican y lo ponen sin tocar la partida. Antes de subir cambios hay que rearmar `update.json` con `node tools/hacer-update.js` (en el código del juego).
+
 ## Privacidad
 
 El juego no junta datos ni tiene publicidad. Ver [privacidad.html](privacidad.html).
