@@ -418,12 +418,14 @@
     E.sheetTitle.textContent = title;
     E.sheetBody.replaceChildren(node);
     E.panel.hidden = true; E.sheet.hidden = false;
+    E.card.classList.toggle('gaming', !!sheetOpts.game);
     E.card.querySelector('.dcard-body').scrollTop = 0; // cada hoja empieza arriba (antes heredaba lo deslizado del panel y el título tapaba el puntaje del juego)
     relayoutCard();
   };
   host.sheetClose = function () {
     if (E.sheet.hidden && !sheetOpts) return;
     E.sheet.hidden = true; E.panel.hidden = false;
+    E.card.classList.remove('gaming');
     E.sheetBody.replaceChildren();
     if (sheetOpts && sheetOpts.onClose) { const f = sheetOpts.onClose; sheetOpts = null; f(); }
     relayoutCard();

@@ -278,6 +278,7 @@
         if (sheetTok === tok) { sheetTok = null; sheetName = null; currentSheet = null; plat.layerChanged(); }
       },
       wide,
+      game: name === 'game', // (los juegos ocupan toda la pantalla)
     });
     sheetTok = tok; sheetName = name; currentSheet = r;
     plat.layerChanged();
@@ -726,6 +727,8 @@
       node.addEventListener('change', (e) => {
         const t = e.target;
         if (t.id === 'import-file' && t.files && t.files[0]) {
+          // (una copia de verdad pesa unos pocos KB: un archivo enorme no se lee, así no se traba el juego)
+          if (t.files[0].size > 2 * 1024 * 1024) { t.value = ''; say('Ese archivo no es una copia de Virtual Pet.', true, 3000); return; }
           const fr = new FileReader();
           fr.onload = () => { pendingImport = String(fr.result || ''); node.querySelector('.confirm-import').hidden = false; };
           fr.readAsText(t.files[0]);

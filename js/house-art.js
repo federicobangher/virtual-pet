@@ -110,11 +110,7 @@
       [sv('0 0 80 50', `<g fill="#fff" opacity=".95"><ellipse cx="40" cy="34" rx="34" ry="14"/><circle cx="28" cy="26" r="14"/><circle cx="48" cy="22" r="17"/></g>`), 14, 13, 2.4, 'cloudy'],
     ],
     paseo: () => [],
-    garaje: () => [
-      [sv('0 0 200 120', `<rect x="4" y="4" width="192" height="112" rx="4" fill="#cfd5e0" stroke="${INK}" stroke-width="4"/>${Array.from({ length: 7 }, (_, i) => `<path d="M4 ${20 + i * 14}h192" stroke="#9aa3b8" stroke-width="4"/>`).join('')}<rect x="84" y="96" width="32" height="8" rx="3" fill="${INK}"/>`), 25, 0, 9.2, 'door wide-c'],
-      [sv('0 0 90 70', `<rect x="4" y="4" width="82" height="62" rx="4" fill="#a86a3a" stroke="${INK}" stroke-width="4"/><path d="M18 18v26M30 14v30M42 20v24M56 16v30M70 22v22" stroke="#e8eef6" stroke-width="5" stroke-linecap="round"/><circle cx="18" cy="18" r="5" fill="#e8394a"/><rect x="50" y="46" width="22" height="10" rx="3" fill="#ffd23f"/>`), 4, 9, 3.6, 'pw'],
-      [sv('0 0 50 60', `<path d="M10 56h30l-4-40H14z" fill="#ff5d6c" stroke="${INK}" stroke-width="4" stroke-linejoin="round"/><rect x="18" y="6" width="14" height="12" rx="3" fill="#ffd23f" stroke="${INK}" stroke-width="3"/>`), 90, 0, 2.6],
-    ],
+    garaje: () => [], // (el portón, las herramientas, el auto y los conos los pone house.js, a la medida del auto)
   };
   function trees() {
     let s = '';
@@ -142,6 +138,15 @@
       `<path d="M296 100l10 4" stroke="#ffd23f" stroke-width="7" stroke-linecap="round"/><path d="M20 102l10-2" stroke="#e8394a" stroke-width="7" stroke-linecap="round"/>` +
       `<circle cx="74" cy="124" r="23" fill="${INK}"/><circle cx="74" cy="124" r="10" fill="#e8eef6"/><circle cx="246" cy="124" r="23" fill="${INK}"/><circle cx="246" cy="124" r="10" fill="#e8eef6"/>`);
   }
+  // Garaje (2.0.2): portón levadizo, tablero de herramientas, cono y cubiertas
+  const garageDoorSVG = () => sv('0 0 200 140', `<rect x="3" y="3" width="194" height="137" rx="3" fill="#7d879c" stroke="${INK}" stroke-width="5"/><rect x="12" y="12" width="176" height="128" fill="#d5dbe6"/>` +
+    Array.from({ length: 8 }, (_, i) => `<path d="M12 ${28 + i * 15}h176" stroke="#a7b0c2" stroke-width="4"/>`).join('') + `<rect x="86" y="118" width="28" height="7" rx="3" fill="${INK}"/>`, ' preserveAspectRatio="none"');
+  const toolsSVG = () => sv('0 0 120 70', `<rect x="3" y="3" width="114" height="64" rx="5" fill="#b07a4a" stroke="${INK}" stroke-width="4"/>` +
+    `<g stroke="${INK}" stroke-width="3" stroke-linecap="round"><path d="M22 14v34" stroke="#e8eef6" stroke-width="6"/><rect x="15" y="44" width="14" height="14" rx="3" fill="#e8394a"/>` +
+    `<path d="M48 14l0 40" stroke="#c3cad6" stroke-width="5"/><circle cx="48" cy="14" r="7" fill="none" stroke="#c3cad6" stroke-width="5"/>` +
+    `<path d="M70 12l10 10-16 30" stroke="#ffd23f" stroke-width="6"/><path d="M96 12v18M90 30h12v20a6 6 0 0 1-12 0z" fill="#5b7cff"/></g>`);
+  const coneSVG = () => sv('0 0 50 60', `<path d="M10 56h30l-4-42H14z" fill="#ff7a2e" stroke="${INK}" stroke-width="4" stroke-linejoin="round"/><path d="M12 38h26M14 24h22" stroke="#fff" stroke-width="5"/><rect x="4" y="52" width="42" height="7" rx="3" fill="#ff7a2e" stroke="${INK}" stroke-width="3"/>`);
+  const tiresSVG = () => sv('0 0 70 60', `<g stroke="${INK}" stroke-width="4"><ellipse cx="35" cy="46" rx="31" ry="11" fill="#3a3f4b"/><ellipse cx="35" cy="30" rx="31" ry="11" fill="#3a3f4b"/><ellipse cx="35" cy="14" rx="31" ry="11" fill="#4a5060"/></g><ellipse cx="35" cy="14" rx="13" ry="4.5" fill="#1f2229"/>`);
   // Canteros de la huerta
   function plotSVG(state, cropEmoji) {
     const VB = '0 -40 100 140';
@@ -160,5 +165,5 @@
   }
   const f = (n) => Math.round(n * 10) / 10;
 
-  N.houseArt = { icon, ROOMS, props: (id) => (P[id] ? P[id]() : []), goalSVG, carSVG, plotSVG, isNight };
+  N.houseArt = { icon, ROOMS, props: (id) => (P[id] ? P[id]() : []), goalSVG, carSVG, plotSVG, isNight, garageDoorSVG, toolsSVG, coneSVG, tiresSVG };
 })();

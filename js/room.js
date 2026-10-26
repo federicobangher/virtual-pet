@@ -36,7 +36,7 @@
       houseHost: app.querySelector('.house-host'), sheetWrap: app.querySelector('.sheet-wrap'), sheetBody: app.querySelector('.sheet-body'),
       sheetTitle: app.querySelector('#sheet-title'), modalWrap: app.querySelector('.modal-wrap'), modalBox: app.querySelector('.modal-box'),
     };
-    house = N.House(E.houseHost, { covered: () => !E.sheetWrap.hidden || !E.modalWrap.hidden });
+    house = N.House(E.houseHost, { covered: () => !E.sheetWrap.hidden || !E.modalWrap.hidden, hidden: () => !E.sheetWrap.hidden && E.sheetWrap.classList.contains('game') });
     // APK directo: la copia de seguridad se guarda donde elijas (Android pregunta)
     if (window.AndroidPet && window.AndroidPet.saveFile) host.saveFile = (name, text) => new Promise((res) => { window.__vpetSaved = (ok) => res(!!ok); window.AndroidPet.saveFile(name, text); });
     host.house = house;
@@ -57,10 +57,14 @@
     E.sheetBody.replaceChildren(node);
     E.sheetWrap.hidden = false;
     E.sheetWrap.classList.toggle('wide', !!sheetOpts.wide);
+    E.sheetWrap.classList.toggle('game', !!sheetOpts.game);
     E.sheetBody.scrollTop = 0;
   };
   host.sheetClose = function () {
+    const wasGame = E.sheetWrap.classList.contains('game');
     E.sheetWrap.hidden = true;
+    E.sheetWrap.classList.remove('game');
+    if (wasGame && house && house.kick) house.kick();
     E.sheetBody.replaceChildren();
     if (sheetOpts && sheetOpts.onClose) { const f = sheetOpts.onClose; sheetOpts = null; f(); }
   };

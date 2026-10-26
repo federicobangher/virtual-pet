@@ -1,5 +1,5 @@
 /* Virtual Pet — service worker: guarda el juego para que funcione sin internet. */
-const VERSION = 'vpet-v2.0.1';
+const VERSION = 'vpet-v2.0.2';
 const FILES = [
   './', './index.html', './manifest.webmanifest',
   './css/pet.css', './css/style.css', './css/house.css',
@@ -18,14 +18,16 @@ self.addEventListener('activate', (e) => {
 });
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  const url = new URL(e.request.url);
+  if (url.origin !== location.origin || /\/update\.json$/.test(url.pathname)) return; // (update.json es para Windows y el APK: siempre de la red)
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || fetch(e.request).then((res) => {
-      if (res.ok && new URL(e.request.url).origin === location.origin) {
+      if (res.ok) {
         const copy = res.clone();
         caches.open(VERSION).then((c) => c.put(e.request, copy));
       }
       return res;
-    }).catch(() => caches.match('./index.html')))
+    }).catch(() => (e.request.mode === 'navigate' ? caches.match('./index.html') : Response.error())))
   );
 });
 self.addEventListener('notificationclick', (e) => {

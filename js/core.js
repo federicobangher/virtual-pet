@@ -3,7 +3,7 @@
   'use strict';
   const N = (window.N = window.N || {});
   const MIN = 60e3, HOUR = 3600e3, DAY = 24 * HOUR;
-  N.APP = { name: 'Virtual Pet', version: '2.0.1', author: 'Facundo Bangher' };
+  N.APP = { name: 'Virtual Pet', version: '2.0.2', author: 'Facundo Bangher' };
 
   const SPECIES = {
     dragon: { name: 'Dragón', fav: 'Carne asada', egg: 'Huevo escamado', hint: 'Comilón: le da hambre seguido' },
@@ -290,7 +290,7 @@
     let raw = null;
     try { raw = localStorage.getItem(KEY); } catch (e) { storageOk = false; }
     if (raw) {
-      try { S = Object.assign(freshState(), JSON.parse(raw)); } catch (e) {
+      try { S = Object.assign(freshState(), safeParse(raw)); } catch (e) {
         // partida dañada: se guarda aparte (por las dudas) y se empieza de nuevo
         try { localStorage.setItem(KEY + '.danada', raw); } catch (e2) {}
         S = freshState();
@@ -300,6 +300,9 @@
     loadInfo = { fromStorage: !!raw, lastSeen: S.lastSeen };
     return S;
   }
+  // (2.0.2) Leer JSON sin claves peligrosas: "__proto__" en una copia modificada a mano cambiaba el prototipo de la partida
+  const BAD_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+  const safeParse = (text) => JSON.parse(text, (k, v) => (BAD_KEYS.has(k) ? undefined : v));
   // Completa datos que faltan en partidas de versiones anteriores (o importadas)
   function migrate(st) {
     const f = freshState();
@@ -313,8 +316,13 @@
     st.gamesOwned = obj(st.gamesOwned); st.purchases = obj(st.purchases);
     Object.keys(st.owned).forEach((k) => { if (!ITEMS[k] || ITEMS[k].kind !== 'wear') delete st.owned[k]; });
     Object.keys(st.gamesOwned).forEach((k) => { if (!GAMES[k]) delete st.gamesOwned[k]; });
-    st.memorial = (Array.isArray(st.memorial) ? st.memorial : []).filter((m) => m && SPECIES[m.species]);
-    st.album = st.album.filter((ph) => ph && SPECIES[ph.species]);
+    // (2.0.2) recuerdos y álbum: sólo datos válidos (una copia de seguridad modificada a mano no puede meter
+    // texto raro en la pantalla ni en los dibujos)
+    const STG = ['egg', 'baby', 'young', 'adult'], str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '');
+    st.memorial = (Array.isArray(st.memorial) ? st.memorial : []).filter((m) => m && typeof m === 'object' && SPECIES[m.species]).slice(0, 60)
+      .map((m) => ({ name: str(m.name, 16) || SPECIES[m.species].name, species: m.species, stage: STG.includes(m.stage) ? m.stage : 'baby', age: Math.max(0, num(m.age, 0)), diedAt: num(m.diedAt, now()), cause: ['hambre', 'enfermedad', 'descuido'].includes(m.cause) ? m.cause : '' }));
+    st.album = st.album.filter((ph) => ph && typeof ph === 'object' && SPECIES[ph.species]).slice(-120)
+      .map((ph) => ({ species: ph.species, stage: STG.includes(ph.stage) ? ph.stage : 'baby', variant: ph.variant === 'shiny' ? 'shiny' : 'normal', name: str(ph.name, 16), accessory: WEAR.includes(ph.accessory) ? ph.accessory : null, level: ph.level == null ? null : Math.max(0, Math.min(R.maxLevel, Math.floor(num(ph.level, 0)))), t: num(ph.t, now()) }));
     st.daily = Object.assign({ last: null, streak: 0 }, obj(st.daily));
     if (typeof st.daily.streak !== 'number' || !(st.daily.streak >= 0)) st.daily.streak = 0;
     st.bgOwned = Object.assign({ cuarto: true, jardin: true }, obj(st.bgOwned));
@@ -355,8 +363,12 @@
       ['food', 'energy', 'fun', 'hygiene', 'health'].forEach((k) => { q[k] = clamp(num(q[k], d[k])); });
       ['age', 'digest', 'careSum', 'careN', 'xp', 'created', 'lastPet', 'lastPetXP'].forEach((k) => { q[k] = Math.max(0, num(q[k], d[k])); });
       if (!['egg', 'baby', 'young', 'adult'].includes(q.stage)) q.stage = 'baby';
+      if (q.variant !== 'shiny') q.variant = 'normal';
+      q.cause = ['hambre', 'enfermedad', 'descuido'].includes(q.cause) ? q.cause : '';
+      q.dead = !!q.dead; q.sick = !!q.sick; q.sleeping = !!q.sleeping;
       if (!Array.isArray(q.poops)) q.poops = [];
-      q.poops = q.poops.filter((x) => x && typeof x.x === 'number').slice(0, R.maxPoops);
+      q.poops = q.poops.filter((x) => x && typeof x.x === 'number' && isFinite(x.x)).slice(0, R.maxPoops)
+        .map((x, i) => ({ id: (String(x.id || '').replace(/[^\w-]/g, '').slice(0, 24)) || 'c' + i + Date.now().toString(36), x: Math.max(0, Math.min(1, x.x)) })); // (2.0.2) datos limpios
       if (!q.egg || typeof q.egg !== 'object') q.egg = { warmth: 35, progress: q.stage === 'egg' ? 0 : 100 };
       q.egg.warmth = clamp(num(q.egg.warmth, 35)); q.egg.progress = Math.max(0, num(q.egg.progress, 0));
       if (q.level != null) q.level = Math.max(0, Math.min(R.maxLevel, Math.floor(num(q.level, 0))));
@@ -1148,7 +1160,7 @@
   }
   function importState(text) {
     let data;
-    try { data = JSON.parse(text); } catch (e) { return no('El archivo no es una copia de Virtual Pet.'); }
+    try { data = safeParse(text); } catch (e) { return no('El archivo no es una copia de Virtual Pet.'); }
     const st = data && (data.app === 'virtual-pet' || data.app === 'nido') && data.state; // 'nido' = copias de versiones anteriores
     if (!st || typeof st !== 'object' || typeof st.coins !== 'number') return no('El archivo no es una copia de Virtual Pet.');
     if (st.pet && !SPECIES[st.pet.species]) return no('La copia está dañada.');
@@ -1174,5 +1186,6 @@
     get timeScale() { return timeScale; },
     set timeScale(v) { timeScale = v; },
     act: A,
+    safeParse,
   };
 })();

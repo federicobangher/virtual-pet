@@ -23,7 +23,7 @@
     { k: 'fun', icon: 'play', label: 'Diversión' },
   ];
   // Dónde se para la mascota en cada ambiente (x en %, tamaño relativo, cuánto más arriba del piso)
-  const SPOT = { jardin: { x: 80, k: 0.6 }, patio: { x: 50, k: 0.68, up: 0.8 }, garaje: { x: 46, k: 0.62, up: 3.2 }, cocina: { x: 56, k: 0.9 }, paseo: { x: 50, k: 0.92 }, bano: { x: 52, k: 0.9 }, laboratorio: { x: 54, k: 0.9 } };
+  const SPOT = { jardin: { x: 80, k: 0.6 }, patio: { x: 50, k: 0.68, up: 0.8 }, garaje: { x: 50, k: 0.62, up: -0.3, upW: 0.15 }, cocina: { x: 56, k: 0.9 }, paseo: { x: 50, k: 0.92 }, bano: { x: 52, k: 0.9 }, laboratorio: { x: 54, k: 0.9 } };
   const spot = (room) => Object.assign({ x: 50, k: 1, up: 0 }, SPOT[room] || {});
   const NEST = `<svg viewBox="0 0 200 60" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><ellipse cx="100" cy="34" rx="86" ry="20" fill="#b9874f"/><ellipse cx="100" cy="28" rx="70" ry="13" fill="#7a5530"/><g stroke="#e0b47a" stroke-width="3" stroke-linecap="round" fill="none"><path d="M20 34 q30 -10 60 2"/><path d="M60 46 q40 -14 84 -2"/><path d="M120 30 q30 -6 62 6"/><path d="M30 42 q24 6 48 0"/><path d="M128 46 q20 4 40 -6"/></g></svg>`;
 
@@ -103,6 +103,8 @@
       // el ancho del dibujo (240 de ancho por 200 de alto) sale del lugar que hay
       let w = Math.min(sceneW * 0.98, sceneH * 0.62 * 1.2, 34 * parseFloat(el.style.fontSize || 16)) * sp.k * (egg ? 0.55 : 1);
       if (p && !egg) w *= p.stage === 'baby' ? 1.15 : p.stage === 'young' ? 1.05 : 1;
+      // garaje: el auto mide 1,75 veces la mascota y tiene que entrar entero en la pantalla
+      if (room() === 'garaje' && !egg) w = Math.min(w, (sceneW * 0.9) / 1.75);
       w = Math.max(90, Math.round(w));
       const v = w + 'px';
       if (E.petbox.style.width !== v) E.petbox.style.width = v;
@@ -140,7 +142,10 @@
         `<div class="h-prop ${cls || ''}" style="left:${left}%;--pl:${left};bottom:calc(var(--floor-y) + ${bottom}em);height:${hgt}em">${svg}</div>`).join('');
       E.special.innerHTML = ''; E.front.innerHTML = '';
       if (id === 'patio') E.special.innerHTML = `<div class="h-goal">${HA.goalSVG()}</div>`;
-      if (id === 'garaje') { E.special.innerHTML = `<div class="h-car back">${HA.carSVG(false)}</div>`; E.front.innerHTML = `<div class="h-car front">${HA.carSVG(true)}</div>`; }
+      if (id === 'garaje') {
+        E.special.innerHTML = `<div class="h-gdoor">${HA.garageDoorSVG()}</div><div class="h-gtools">${HA.toolsSVG()}</div><div class="h-car back">${HA.carSVG(false)}</div>`;
+        E.front.innerHTML = `<div class="h-car front">${HA.carSVG(true)}</div><div class="h-gcone">${HA.coneSVG()}</div><div class="h-gtires">${HA.tiresSVG()}</div>`;
+      }
       if (id === 'jardin') { E.special.innerHTML = '<div class="h-plots"></div>'; plotsKey = ''; }
       if (id === 'juegos' && ballOut) E.special.appendChild(ballEl());
       shownPlace = null;
@@ -242,7 +247,8 @@
 
     /* ---------- animación ---------- */
     const anim = N.petAnim({
-      svg: () => (el.isConnected && E.pet.firstElementChild && !H.paused ? E.pet.firstElementChild : null),
+      // (2.0.2) no dibuja si no se ve: tapada por un juego a pantalla completa o escondida (panel de Windows con una hoja abierta)
+      svg: () => (el.isConnected && E.pet.firstElementChild && !H.paused && !(opts.hidden && opts.hidden()) && el.getClientRects().length ? E.pet.firstElementChild : null),
       view: () => view, look: lookTarget, ms: { active: 66, idle: 110, sleep: 400, egg: 80 },
       slow: () => !!(opts.covered && opts.covered()),
       saver: UI().saverOn,
@@ -750,7 +756,9 @@
     function placePet(xPct, ms, force) {
       const sp = spot(room());
       const px = Math.round((xPct / 100) * sceneW);
-      const v = `translate3d(${px}px, ${(-sp.up).toFixed(2)}em, 0) translateX(-50%)`;
+      // (upW: cuánto sube según el tamaño de la mascota; en el garaje queda sentada en el auto en cualquier pantalla)
+      const dy = sp.upW ? `calc(${(-sp.up).toFixed(2)}em - var(--petw, 10em) * ${sp.upW})` : `${(-sp.up).toFixed(2)}em`;
+      const v = `translate3d(${px}px, ${dy}, 0) translateX(-50%)`;
       const tr = ms ? `transform ${Math.round(ms)}ms linear` : 'none';
       if (E.petbox.style.transition !== tr) E.petbox.style.transition = tr;
       if (!force && v === placed) return;

@@ -693,3 +693,54 @@ button.meter:focus-visible { outline: 2px solid var(--plum); outline-offset: 1px
 /* Windows: los juegos entran enteros en el panel, sin tener que deslizar (antes el Salto quedaba cortado) */
 .dcard .g-canvas { width: min(100%, calc((var(--card-maxh, 600px) - 17rem) * 360 / 420)); }
 .dcard .g-hint { margin: 0; font-size: .78rem; }
+
+/* =================================================================
+   2.0.2 — Juegos a pantalla completa
+   Antes se abrían en una hoja que tapaba sólo una parte (en la tablet quedaban chicos y con letra diminuta;
+   con el celular acostado había que desplazar para ver el juego). Ahora ocupan todo, y games.js mide el
+   área libre (.g-stage) para agrandar el tablero o el lienzo, incluso si se gira la pantalla.
+   ================================================================= */
+.sheet-wrap.game { align-items: stretch; background: var(--paper); height: var(--app-h, 100%); bottom: auto; animation: none; }
+.sheet-wrap.game .sheet { max-width: none; max-height: none; height: 100%; border: 0; border-radius: 0; box-shadow: none; animation: fade .15s ease-out; }
+.sheet-wrap.game .sheet header { border-radius: 0; padding-top: max(0.5rem, env(safe-area-inset-top, 0px)); padding-bottom: 0.4rem; }
+.sheet-wrap.game .sheet header::before { display: none; }
+.sheet-wrap.game .sheet-body { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding-top: 0.5rem; }
+.sheet-wrap.game .game-host { font-size: clamp(1rem, 0.62rem + 1.5vmin, 1.5rem); }
+.game-host { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.g-wrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 0.5em; text-align: center; }
+.g-wrap > * { flex: none; }
+.g-wrap > .g-stage { flex: 1 1 auto; min-height: 0; }
+.g-stage { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
+.g-top { margin: 0; gap: 0.4em; flex-wrap: wrap; }
+.g-top > span { background: #fff; border: 2px solid var(--line); border-radius: 999px; padding: 0.15em 0.75em; }
+.g-hint { font-size: .8em; margin: 0; line-height: 1.3; }
+.gg-msg { font-size: 1.15em; }
+.g-canvas { max-width: none; aspect-ratio: auto; margin: 0; flex: none; }
+.gg-pet { max-width: 100%; }
+.g-guess .gg-btns { gap: 0.5em; }
+.g-guess .gg-btns .btn { flex: 1; font-size: 1em; min-height: 3em; }
+.mem-grid { max-width: none; width: auto; justify-self: auto; }
+.mem-card .mem-back { font-size: 1em; }
+.simon { max-width: 100%; }
+.ttt { max-width: 100%; }
+.ttt button { font-size: 1em; }
+.ttt-vs { width: 100%; max-width: 32em; grid-template-columns: 1fr 5.5em 1fr; margin-bottom: 0.4em; }
+.g-stage.land:has(.ttt) { flex-direction: row; gap: 1em; }
+.g-stage.land .ttt-vs { width: 9em; grid-template-columns: 1fr; grid-template-rows: auto 6em auto; gap: 0.3em; margin: 0; }
+.holes, .gol-field { max-width: 100%; }
+.game-host > .game-over { margin: auto; width: min(100%, 26rem); }
+.sheet-wrap.game .game-over h3 { font-size: 1.7em; }
+.sheet-wrap.game .go-pet { width: min(14rem, 40vmin); }
+/* lugar muy bajo (celular acostado): sin el texto de ayuda y con el título más chico */
+@media (max-height: 30rem) {
+  .sheet-wrap.game .sheet header { padding-top: max(0.25rem, env(safe-area-inset-top, 0px)); padding-bottom: 0.25rem; }
+  .sheet-wrap.game .sheet h3 { font-size: 1.1rem; }
+  .sheet-wrap.game .sheet .x { width: 2.25rem; height: 2.25rem; }
+  .sheet-wrap.game .sheet-body { padding-top: 0.25rem; padding-bottom: max(0.4rem, env(safe-area-inset-bottom, 0px)); }
+  .sheet-wrap.game .g-wrap { gap: 0.3em; }
+  .sheet-wrap.game .g-hint { display: none; }
+}
+/* Windows: el juego ocupa toda la tarjeta */
+.dcard.gaming .dcard-body { overflow: hidden; }
+.dcard.gaming .game-host { height: calc(var(--card-maxh, 600px) - 12rem); min-height: 18rem; }
+.dcard.gaming .g-top { font-size: .9rem; }
