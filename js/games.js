@@ -465,7 +465,7 @@
   function tatetiGame(root, finish) {
     const ROUNDS = 3, MAX = ROUNDS * 2;
     root.innerHTML = `<div class="g-wrap g-tateti"><div class="g-top"><span>Ronda <b class="rd">1</b>/${ROUNDS}</span><span>Puntos <b class="sc">0</b></span></div>
-      <div class="g-stage"><div class="ttt-vs"><span class="ttt-me">Vos <b>✕</b></span><div class="ttt-pet"></div><span class="ttt-it"><b>◯</b> Mascota</span></div>
+      <div class="g-stage g-ttt"><div class="ttt-vs"><span class="ttt-me">Vos <b>✕</b></span><div class="ttt-pet"></div><span class="ttt-it"><b>◯</b> Mascota</span></div>
       <div class="ttt">${Array.from({ length: 9 }, (_, i) => `<button type="button" data-i="${i}" aria-label="Casilla ${i + 1}"></button>`).join('')}</div></div>
       <p class="gg-msg">Te toca: poné tu ✕</p></div>`;
     const cells = [...root.querySelectorAll('.ttt button')], msg = root.querySelector('.gg-msg');

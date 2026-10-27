@@ -178,6 +178,7 @@
       if (id === room()) return;
       C.act.setRoom(id);
       stopWalk(); clearTimeout(walkTimer);
+      if (foam) clearFoam(); // (la espuma del baño no viaja a los otros ambientes)
       E.scene.classList.remove('slide-l', 'slide-r'); void E.scene.offsetWidth;
       E.scene.classList.add(dir < 0 ? 'slide-r' : 'slide-l');
       drawRoom(true);
@@ -249,7 +250,9 @@
     const anim = N.petAnim({
       // (2.0.2) no dibuja si no se ve: tapada por un juego a pantalla completa o escondida (panel de Windows con una hoja abierta)
       svg: () => (el.isConnected && E.pet.firstElementChild && !H.paused && !(opts.hidden && opts.hidden()) && el.getClientRects().length ? E.pet.firstElementChild : null),
-      view: () => view, look: lookTarget, ms: { active: 66, idle: 110, sleep: 400, egg: 80 },
+      // (2.0.3) en el panel de Windows, un poco menos de cuadros: la ventana transparente es grande y cada cuadro
+      // le cuesta más a la compu (en el celular se sigue viendo igual que antes)
+      view: () => view, look: lookTarget, ms: H.compact ? { active: 85, idle: 140, sleep: 500, egg: 100 } : { active: 66, idle: 110, sleep: 400, egg: 80 },
       slow: () => !!(opts.covered && opts.covered()),
       saver: UI().saverOn,
       extra: (t) => { // el olorcito de las cacas
@@ -260,8 +263,8 @@
         st.forEach((e) => { if (e.style.transform !== tf) { e.style.transform = tf; e.style.opacity = op; } });
       },
     });
-    view.onSvg = () => anim.kick();
-    H.kick = () => anim.kick();
+    view.onSvg = () => anim.kick(true);
+    H.kick = () => anim.kick(true);
 
     /* ---------- tocar a la mascota ---------- */
     let rub = null;
@@ -293,7 +296,8 @@
     const SHOP = (tab) => ({ ic: 'shop', lb: 'Tienda', run: open('shop', tab) });
     const ROOM_BTNS = {
       cocina: { left: { ic: 'fridge', lb: 'Heladera', run: open('fridge') }, center: 'food', right: SHOP('comida') },
-      bano: { left: { ic: 'shower', lb: 'Ducha', run: () => shower() }, center: { ic: 'soap', lb: 'Jabón', run: () => soapAuto(), drag: 'soap' }, right: SHOP('salud') },
+      // (2.0.3) la ducha también se agarra con el mouse o el dedo y se pasa por encima para sacarle el jabón
+      bano: { left: { ic: 'shower', lb: 'Ducha', run: () => shower(), drag: 'shower' }, center: { ic: 'soap', lb: 'Jabón', run: () => soapAuto(), drag: 'soap' }, right: SHOP('salud') },
       dormitorio: { left: { ic: 'wardrobe', lb: 'Armario', run: open('wardrobe') }, center: 'lamp', right: SHOP('ropa') },
       living: { left: { ic: 'album', lb: 'Álbum', run: open('album') }, center: { ic: 'music', lb: 'Música', run: () => music() }, right: SHOP() },
       juegos: { left: { ic: 'games', lb: 'Juegos', run: () => games() }, center: { ic: 'ball', lb: 'Pelota', run: () => toggleBall() }, right: SHOP('juegos') },
@@ -306,11 +310,13 @@
     const EGG_BTNS = { left: { ic: 'menu', lb: 'Más', run: open('more') }, center: { ic: 'flame', lb: 'Dar calor', run: () => UI().warmEgg() }, right: SHOP() };
     let btnKey = '', curCenter = null, foodSel = null, medSel = null;
     function setBtn(b, d) {
-      if (!d) { b.hidden = true; return; }
+      if (!d) { b.hidden = true; b._drag = null; return; }
       b.hidden = false;
       setHTML(b.querySelector('.hb-ic'), d.html || ic(d.ic));
       setText(b.querySelector('.hb-lb'), d.lb);
       b._run = d.run;
+      b._drag = d.drag || null;
+      setCls(b, 'draggable', !!d.drag);
     }
     const owned = (ids) => ids.filter((id) => (C.state.inv[id] || 0) > 0);
     function buttons(force) {
@@ -342,7 +348,6 @@
       curCenter = center;
       setHidden(E.cprev, !carousel); setHidden(E.cnext, !carousel);
       setCls(E.center, 'carousel', carousel);
-      setCls(E.bc, 'draggable', !!(center && center.drag));
     }
     [E.bl, E.bc, E.br].forEach((b) => b.addEventListener('click', () => { snd.unlock(); if (b._dragged) { b._dragged = false; return; } if (b._run) b._run(); }));
     const cycle = (d) => {
@@ -358,56 +363,100 @@
     E.cnext.addEventListener('click', () => cycle(1));
     H.selectFood = (id) => { foodSel = id; buttons(true); };
 
-    /* ---------- arrastrar comida (o el jabón) hasta la mascota ---------- */
+    /* ---------- arrastrar comida, el jabón o la ducha hasta la mascota ----------
+       (2.0.3) La ducha también se arrastra: se agarra con el mouse o el dedo, cae agua debajo y, donde pasa por
+       encima de la mascota, se lleva la espuma del jabón. Cuando ya no queda espuma (o si la mojaste un rato sin
+       jabón), queda bañada. Tocar el botón sin arrastrar sigue bañándola sola, como antes. */
     let drag = null;
-    E.bc.addEventListener('pointerdown', (e) => {
-      if (!curCenter || !curCenter.drag) return;
-      drag = { kind: curCenter.drag, id: curCenter.drag === 'food' ? foodSel : curCenter.drag === 'med' ? medSel : 'soap', sx: e.clientX, sy: e.clientY, cx: e.clientX, cy: e.clientY, moving: false, ghost: null, lastSoap: 0 };
-      try { E.bc.setPointerCapture(e.pointerId); } catch (_) { /* nada */ }
-    });
-    E.bc.addEventListener('pointermove', (e) => {
+    function dragStart(b, e) {
+      const kind = b._drag;
+      if (!kind || drag) return;
+      if (kind === 'food' || kind === 'med') { if (!curCenter || !curCenter.drag) return; }
+      drag = { kind, btn: b, id: kind === 'food' ? foodSel : kind === 'med' ? medSel : kind, sx: e.clientX, sy: e.clientY, cx: e.clientX, cy: e.clientY, moving: false, ghost: null, lastSoap: 0, lastRinse: 0, rinse: 0, foam0: foam, bathed: false, splash: 0 };
+      try { b.setPointerCapture(e.pointerId); } catch (_) { /* nada */ }
+    }
+    function dragMove(e) {
       if (!drag) return;
       drag.cx = e.clientX; drag.cy = e.clientY;
       if (!drag.moving && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 10) {
         drag.moving = true;
-        const src = E.bc.querySelector('.hb-ic');
-        drag.ghost = h(`<div class="h-ghost">${src.innerHTML}</div>`);
+        const src = drag.btn.querySelector('.hb-ic');
+        if (drag.kind === 'shower') {
+          // la ducha con su chorro de agua (las gotitas caen sólo mientras la arrastrás)
+          drag.ghost = h(`<div class="h-ghost h-showerhead"><div class="h-stream">${'<i></i>'.repeat(7)}</div>${src.innerHTML}</div>`);
+          snd.play('bath');
+        } else drag.ghost = h(`<div class="h-ghost">${src.innerHTML}</div>`);
         el.appendChild(drag.ghost);
         const p = C.state.pet;
         if (p && !p.sleeping && !p.dead && drag.kind === 'food') view.setTemp('surprise', 60000);
       }
-      if (drag.moving) {
-        const r = el.getBoundingClientRect();
-        drag.ghost.style.transform = `translate(${(e.clientX - r.left).toFixed(0)}px, ${(e.clientY - r.top).toFixed(0)}px) translate(-50%, -50%)`;
-        anim.kick();
-        const over = overPet(e.clientX, e.clientY);
-        if (drag.kind === 'soap' && over) {
-          const t = performance.now();
-          if (t - drag.lastSoap > 140) { drag.lastSoap = t; addFoam(e.clientX, e.clientY); }
-        }
-        setCls(E.petbox, 'target', over && drag.kind !== 'soap');
-      }
-    });
-    const endDrag = (e, cancel) => {
+      if (!drag.moving) return;
+      const r = el.getBoundingClientRect();
+      drag.ghost.style.transform = `translate(${(e.clientX - r.left).toFixed(0)}px, ${(e.clientY - r.top).toFixed(0)}px) translate(-50%, -50%)`;
+      anim.kick();
+      const t = performance.now();
+      if (drag.kind === 'shower') { rinseAt(e.clientX, e.clientY, t); return; }
+      const over = overPet(e.clientX, e.clientY);
+      // (2.0.3) la espuma queda sólo sobre el cuerpo (antes también en el aire, alrededor de la mascota)
+      if (drag.kind === 'soap' && over && t - drag.lastSoap > 140 && overBody(e.clientX, e.clientY)) { drag.lastSoap = t; addFoam(e.clientX, e.clientY); }
+      setCls(E.petbox, 'target', over && drag.kind !== 'soap');
+    }
+    function dragEnd(e, cancel) {
       if (!drag) return;
       const d = drag; drag = null;
-      setCls(E.petbox, 'target', false);
+      setCls(E.petbox, 'target', false); setCls(E.petbox, 'wet', false);
       if (!d.moving) return;
-      E.bc._dragged = true; setTimeout(() => { E.bc._dragged = false; }, 50);
+      d.btn._dragged = true; setTimeout(() => { d.btn._dragged = false; }, 50);
       if (view.temp === 'surprise') { view.temp = null; view.render(); }
       const over = !cancel && overPet(e.clientX, e.clientY);
       if (d.ghost) {
-        if (over && d.kind !== 'soap') d.ghost.remove();
+        if (over && (d.kind === 'food' || d.kind === 'med')) d.ghost.remove();
         else { d.ghost.classList.add('back'); setTimeout(() => d.ghost.remove(), 260); }
       }
       if (over && d.kind === 'food') feed(d.id);
       else if (over && d.kind === 'med') medicate(d.id);
-    };
-    E.bc.addEventListener('pointerup', (e) => endDrag(e));
-    E.bc.addEventListener('pointercancel', (e) => endDrag(e, true));
+      else if (d.kind === 'shower' && d.bathed) { const p = C.state.pet; if (p && !p.sleeping) view.setAct('shake', 1300); }
+    }
+    [E.bl, E.bc].forEach((b) => {
+      b.addEventListener('pointerdown', (e) => dragStart(b, e));
+      b.addEventListener('pointermove', dragMove);
+      b.addEventListener('pointerup', (e) => dragEnd(e));
+      b.addEventListener('pointercancel', (e) => dragEnd(e, true));
+      b.addEventListener('lostpointercapture', (e) => { if (drag && drag.btn === b) dragEnd(e, true); });
+    });
+    function overBody(cx, cy) {
+      const svg = E.pet.firstElementChild, t = document.elementFromPoint(cx, cy);
+      return !!(t && svg && t !== svg && svg.contains(t));
+    }
     function overPet(cx, cy) {
       const r = E.petbox.getBoundingClientRect();
       return cx > r.left + r.width * 0.12 && cx < r.right - r.width * 0.12 && cy > r.top + r.height * 0.05 && cy < r.bottom;
+    }
+    // El agua cae desde la ducha hacia abajo: moja lo que tenga debajo (en una franja del ancho del chorro)
+    function rinseAt(cx, cy, t) {
+      const p = C.state.pet;
+      const pr = E.petbox.getBoundingClientRect();
+      const half = Math.max(18, pr.width * 0.16);
+      const wet = p && !p.dead && p.stage !== 'egg' && cx > pr.left + pr.width * 0.08 && cx < pr.right - pr.width * 0.08 && cy < pr.bottom - pr.height * 0.1;
+      setCls(E.petbox, 'wet', wet);
+      if (!wet) { drag.lastRinse = 0; return; }
+      if (p.sleeping) { if (!drag.warned) { drag.warned = true; H.bubble('Está durmiendo.', 1600, true); } return; }
+      if (drag.lastRinse) drag.rinse += Math.min(120, t - drag.lastRinse);
+      drag.lastRinse = t;
+      // la espuma que queda debajo del chorro se va con el agua
+      E.petbox.querySelectorAll('.h-foam:not(.rinse)').forEach((f) => {
+        const fr = f.getBoundingClientRect(), fx = fr.left + fr.width / 2, fy = fr.top + fr.height / 2;
+        if (Math.abs(fx - cx) < half + fr.width / 2 && fy > cy - fr.height) { f.classList.add('rinse'); foam = Math.max(0, foam - 1); setTimeout(() => f.remove(), 320); }
+      });
+      if (t - drag.splash > 700) { drag.splash = t; snd.play('bath'); if (!drag.bathed && Math.random() < 0.5) view.setTemp('happy', 900); }
+      // bañada: sin espuma (si tenía) o un ratito de agua (si no tenía)
+      const need = drag.foam0 > 0 || foam > 0 ? 500 : 1400;
+      if (!drag.bathed && foam === 0 && drag.rinse >= need) {
+        drag.bathed = true;
+        const r = C.act.bath();
+        if (r.ok) { snd.play('happy'); UI().fx(E.petbox, 'bath'); H.bubble(r.msg, 2000); }
+        else if (r.msg) H.bubble(r.msg, 1600);
+      }
     }
 
     /* ---------- acciones de cada ambiente ---------- */
@@ -437,8 +486,11 @@
     // Baño: el jabón hace espuma sobre la mascota y la ducha la enjuaga (y la deja limpita)
     let foam = 0;
     const soapMode = () => room() === 'bano' && drag && drag.kind === 'soap';
+    let sleepWarn = 0;
     function addFoam(cx, cy) {
-      const p = alive('Está durmiendo.'); if (!p) return;
+      const p = alive(); if (!p) return;
+      // (2.0.3) durmiendo: lo dice una vez y no hace espuma (antes repetía el globito en cada burbuja)
+      if (p.sleeping) { const t = performance.now(); if (t - sleepWarn > 2500) { sleepWarn = t; H.bubble('Está durmiendo.', 1600, true); } return; }
       const r0 = E.petbox.getBoundingClientRect();
       const b = h('<i class="h-foam"></i>');
       b.style.left = ((cx - r0.left) / r0.width * 100).toFixed(1) + '%';
@@ -446,12 +498,14 @@
       b.style.setProperty('--s', (0.7 + Math.random() * 0.8).toFixed(2));
       E.petbox.appendChild(b); foam++;
       if (foam > 40) { const old = E.petbox.querySelector('.h-foam'); if (old) old.remove(); foam--; }
-      if (C.act.toy('soap').ok) { snd.play('good'); if (Math.random() < 0.3) view.setTemp('happy', 900); }
+      if (C.act.soap().ok) { snd.play('good'); if (Math.random() < 0.3) view.setTemp('happy', 900); }
     }
     function soapAuto() {
       const p = alive('Está durmiendo.'); if (!p) return;
       const r = E.petbox.getBoundingClientRect();
-      for (let i = 0; i < 9; i++) setTimeout(() => addFoam(r.left + r.width * (0.3 + Math.random() * 0.4), r.top + r.height * (0.35 + Math.random() * 0.5)), i * 110);
+      for (let i = 0; i < 9; i++) setTimeout(() => {
+        for (let k = 0; k < 12; k++) { const x = r.left + r.width * (0.2 + Math.random() * 0.6), y = r.top + r.height * (0.25 + Math.random() * 0.65); if (overBody(x, y) || k === 11) { addFoam(x, y); break; } }
+      }, i * 110);
       view.setTemp('happy', 1500);
     }
     function clearFoam() { E.petbox.querySelectorAll('.h-foam').forEach((f) => f.remove()); foam = 0; }
@@ -845,7 +899,7 @@
       view.render();
     };
     // en Windows la casa se pausa cuando el panel se cierra (no anima nada escondida)
-    H.pause = (v) => { H.paused = !!v; if (!v) { fit(); anim.kick(); } };
+    H.pause = (v) => { H.paused = !!v; if (!v) { fit(); anim.kick(true); } };
     // teclado (Windows y compu): flechas para cambiar de ambiente
     window.addEventListener('keydown', (e) => {
       if (H.paused || !el.isConnected || UI().sheetOpen || UI().modalOpen || (e.target && e.target.closest && e.target.closest('input,textarea'))) return;

@@ -1,9 +1,9 @@
 /* Virtual Pet — service worker: guarda el juego para que funcione sin internet. */
-const VERSION = 'vpet-v2.0.2';
+const VERSION = 'vpet-v2.0.3';
 const FILES = [
   './', './index.html', './manifest.webmanifest',
   './css/pet.css', './css/style.css', './css/house.css',
-  './js/art.js', './js/core.js', './js/platform.js', './js/sound.js', './js/anim.js', './js/ui.js', './js/billing.js', './js/games.js', './js/themes.js', './js/house-art.js', './js/house.js', './js/room.js', './js/desktop.js', './js/boot.js',
+  './js/compat.js', './js/art.js', './js/core.js', './js/platform.js', './js/sound.js', './js/anim.js', './js/ui.js', './js/billing.js', './js/games.js', './js/themes.js', './js/house-art.js', './js/house.js', './js/room.js', './js/desktop.js', './js/boot.js',
   './fonts/grandstander-latin-800-normal.woff2', './fonts/nunito-latin-600-normal.woff2', './fonts/nunito-latin-800-normal.woff2',
   './icons/icon-192.png', './icons/icon-256.png', './icons/icon-512.png', './icons/maskable-512.png',
 ];

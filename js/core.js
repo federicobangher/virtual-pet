@@ -3,7 +3,7 @@
   'use strict';
   const N = (window.N = window.N || {});
   const MIN = 60e3, HOUR = 3600e3, DAY = 24 * HOUR;
-  N.APP = { name: 'Virtual Pet', version: '2.0.2', author: 'Facundo Bangher' };
+  N.APP = { name: 'Virtual Pet', version: '2.0.3', author: 'Facundo Bangher' };
 
   const SPECIES = {
     dragon: { name: 'Dragón', fav: 'Carne asada', egg: 'Huevo escamado', hint: 'Comilón: le da hambre seguido' },
@@ -146,6 +146,7 @@
     sem_sandia: { name: 'Semillas de sandía', crop: 'sandia', n: 2, grow: 6 * HOUR, price: 12 },
   };
   const PLOTS = 5, WET_MS = 3 * HOUR;
+  const SOAP_MS = 15 * MIN; // la espuma dura un rato: si lo enjuagás después, ya no cuenta como enjabonado
   const ITEMS = {
     fruit: { name: 'Manzana', price: 5, kind: 'food', cat: 'fruta', food: 25, health: 2, desc: 'Llena bastante y es sana.' },
     fav: { name: 'Su comida favorita', price: 12, kind: 'food', cat: 'comida', food: 45, fun: 10, desc: 'Llena mucho y lo pone contento.' },
@@ -210,7 +211,7 @@
     music: { fun: 6, energy: -1, cd: 60e3 },           // living: bailar con música
     tv: { fun: 4, energy: 1, cd: 60e3 },               // living: mirar la tele (descansa un poquito)
     kick: { fun: 2, energy: -0.5, cd: 1200 },          // patio: patear al arco
-    soap: { hygiene: 3, fun: 1, cd: 700 },             // baño: jabón
+    soap: { fun: 1, cd: 700 },                         // baño: jabón (limpia del todo al enjuagarlo con la ducha)
     paseo: { fun: 12, energy: -3, cd: 20 * MIN },      // paseo: salir a pasear
     rain: { fun: 2, cd: 30 * MIN },                    // jardín: le gusta la lluvia
     swing: { fun: 5, energy: -1, cd: 30e3 },           // patio: hamaca
@@ -278,6 +279,7 @@
       sick: false, sleeping: false, poops: [], digest: 0, careSum: 0, careN: 0, variant: 'normal',
       level: 0, xp: 0, lastPetXP: 0, lastInteract: now(),
       lastPet: 0, dead: false, diedAt: 0, cause: '',
+      soapAt: 0, soapH0: null,
     };
   }
 
@@ -361,7 +363,8 @@
       const q = st.pet;
       q.name = String(q.name || d.name).slice(0, 16);
       ['food', 'energy', 'fun', 'hygiene', 'health'].forEach((k) => { q[k] = clamp(num(q[k], d[k])); });
-      ['age', 'digest', 'careSum', 'careN', 'xp', 'created', 'lastPet', 'lastPetXP'].forEach((k) => { q[k] = Math.max(0, num(q[k], d[k])); });
+      ['age', 'digest', 'careSum', 'careN', 'xp', 'created', 'lastPet', 'lastPetXP', 'soapAt'].forEach((k) => { q[k] = Math.max(0, num(q[k], d[k])); });
+      q.soapH0 = typeof q.soapH0 === 'number' && isFinite(q.soapH0) ? clamp(q.soapH0) : null;
       if (!['egg', 'baby', 'young', 'adult'].includes(q.stage)) q.stage = 'baby';
       if (q.variant !== 'shiny') q.variant = 'normal';
       q.cause = ['hambre', 'enfermedad', 'descuido'].includes(q.cause) ? q.cause : '';
@@ -978,16 +981,31 @@
       return ok('');
     },
     seenNews() { S.news = 0; save(); return ok(''); },
+    /* (2.0.3) Jabón: hace espuma y divierte un poquito. Lo que limpia es enjuagarlo con la ducha (bath): así el
+       baño completo cuenta como baño aunque el jabón ya lo haya dejado "casi limpio". Antes el jabón subía la
+       higiene sola y después la ducha decía "Ya está limpito" sin sumar el baño ni los puntos. */
+    soap() {
+      const p = S.pet;
+      if (!alive() || p.stage === 'egg') return no('');
+      if (p.sleeping) return no('Está durmiendo.');
+      const t = now();
+      if (!p.soapAt || t - p.soapAt > SOAP_MS || t < p.soapAt) p.soapH0 = p.hygiene;
+      p.soapAt = t;
+      const r = A.toy('soap');
+      return r.ok ? r : ok('');
+    },
     bath() {
       const p = S.pet;
       if (!alive() || p.stage === 'egg') return no('');
       if (p.sleeping) return no('Está durmiendo.');
-      if (p.hygiene >= 95) return no('Ya está limpito.');
-      const h0 = p.hygiene;
+      const t = now(), soapy = !!p.soapAt && t - p.soapAt < SOAP_MS && t >= p.soapAt;
+      if (p.hygiene >= 95 && !soapy) return no('Ya está limpito.');
+      const h0 = soapy && p.soapH0 != null ? Math.min(p.hygiene, p.soapH0) : p.hygiene;
+      p.soapAt = 0; p.soapH0 = null;
       p.hygiene = 100;
-      S.stats.baths++;
-      p.fun = clamp(p.fun + (p.species === 'lizard' || p.species === 'turtle' ? 6 : -2));
-      const r = done(ok('¡Qué limpito!', { anim: 'bath' }));
+      if (h0 < 95) S.stats.baths++; // (enjabonarlo limpio no cuenta para el logro)
+      p.fun = clamp(p.fun + (p.species === 'lizard' || p.species === 'turtle' ? 6 : -2) + (soapy ? 3 : 0));
+      const r = done(ok(soapy ? '¡Sin nada de jabón! ¡Qué limpito!' : '¡Qué limpito!', { anim: 'bath' }));
       gain(h0 < 50 ? 8 : h0 < 75 ? 3 : 0);
       return r;
     },

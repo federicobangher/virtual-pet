@@ -27,6 +27,7 @@
     window.addEventListener('orientationchange', () => setTimeout(fitHeight, 250));
     if (window.visualViewport) window.visualViewport.addEventListener('resize', fitHeight);
     document.body.classList.add('mode-room');
+    document.documentElement.classList.add('is-room'); // (las tablets agrandan la letra con esto; antes era html:has(), que los navegadores viejos no entienden)
     const app = document.getElementById('app');
     app.innerHTML = `
       <main class="room-app"><div class="house-host"></div></main>

@@ -5,7 +5,7 @@
 .mode-room .room-app { max-width: none; background: #2a1f3d; }
 .house-host { position: relative; flex: 1 1 auto; min-height: 0; }
 .house {
-  position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden;
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; overflow: hidden;
   --floor-y: 19%; --toph: 3.3em; --wall: #ffb84d; --floorc: #a86a3a; --bar: #b86b12; --top: #ffe3b3; --titlec: #fff;
   background: var(--wall); color: var(--ink); user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
   font-size: 16px; line-height: 1.15;
@@ -28,7 +28,7 @@
 .h-plus { position: absolute; left: 1.7em; top: -.15em; width: 1.1em; height: 1.1em; display: grid; place-items: center; border-radius: 50%; background: #22b07d; color: #fff; font-weight: 800; font-size: .95em; border: .12em solid var(--ink); line-height: 1; }
 .h-stats { flex: 1 1 auto; display: flex; justify-content: center; gap: .28em; min-width: 0; }
 .h-stat { position: relative; flex: 0 1 2.4em; width: 2.4em; max-width: 2.4em; aspect-ratio: 1; height: auto; padding: 0; border: .15em solid var(--ink); border-radius: .42em; overflow: hidden; background: #ebe4f3; box-shadow: 0 .12em 0 rgba(42, 31, 61, .35); }
-.h-fill { position: absolute; inset: 0; background: linear-gradient(#5ee36f, #2fbf4a); transform: translateY(100%); transition: transform .6s ease, background .4s; }
+.h-fill { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: linear-gradient(#5ee36f, #2fbf4a); transform: translateY(100%); transition: transform .6s ease, background .4s; }
 .h-stat[data-lvl="mid"] .h-fill { background: linear-gradient(#ffe066, #ffbf1f); }
 .h-stat[data-lvl="low"] .h-fill { background: linear-gradient(#ff7a7a, #ef3f57); }
 .h-sic { position: relative; z-index: 1; display: grid; place-items: center; width: 100%; height: 100%; color: var(--ink); }
@@ -36,7 +36,7 @@
 .h-stat.ping[data-lvl="low"] { animation: h-pulse .9s ease-in-out 3; }
 @keyframes h-pulse { 50% { transform: scale(1.13); } }
 .h-level { flex: none; position: relative; width: 2.85em; height: 2.85em; padding: 0; border: 0; background: none; }
-.h-level svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.h-level svg { position: absolute; top: 0; right: 0; bottom: 0; left: 0; width: 100%; height: 100%; }
 .h-lv { position: relative; z-index: 1; font-size: .92em; display: block; margin-top: .25em; }
 .h-xp { position: absolute; left: 12%; right: 12%; bottom: -.15em; height: .32em; border-radius: .2em; background: rgba(42, 31, 61, .25); overflow: hidden; }
 .h-xp > i { display: block; height: 100%; background: #7b61ff; transform: translateX(-100%); transition: transform .6s; }
@@ -56,7 +56,7 @@
 
 /* ---------- ambiente ---------- */
 .h-scene { position: relative; flex: 1 1 auto; min-height: 8em; overflow: hidden; touch-action: pan-y; }
-.h-wall { position: absolute; inset: 0; background-color: var(--wall); transition: background-color .3s; }
+.h-wall { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background-color: var(--wall); transition: background-color .3s; }
 .wp-stripes { background-image: repeating-linear-gradient(90deg, rgba(255, 255, 255, .13) 0 1.5em, transparent 1.5em 3em); }
 .wp-tiles { background-image: linear-gradient(rgba(255, 255, 255, .25) .09em, transparent .09em), linear-gradient(90deg, rgba(255, 255, 255, .25) .09em, transparent .09em); background-size: 2.3em 2.3em; }
 .wp-stars { background-image: radial-gradient(circle, rgba(255, 255, 255, .5) .12em, transparent .16em), radial-gradient(circle, rgba(255, 240, 180, .45) .09em, transparent .13em); background-size: 3.1em 3.1em, 2.3em 2.3em; background-position: 0 0, 1.2em 1.4em; }
@@ -73,7 +73,7 @@
 .fp-stripes-grass { background-image: repeating-linear-gradient(90deg, rgba(255, 255, 255, .1) 0 2.6em, transparent 2.6em 5.2em); border-top-color: rgba(30, 90, 20, .35); }
 .fp-concrete { background-image: radial-gradient(circle, rgba(255, 255, 255, .08) .1em, transparent .12em); background-size: 1.1em 1.1em; }
 /* paseo: el lugar elegido (mismos dibujos que tenían los fondos del cuarto) */
-.h-place { display: none; position: absolute; inset: 0; }
+.h-place { display: none; position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
 .h-scene.is-place .h-place { display: block; }
 .h-scene.is-place .h-wall, .h-scene.is-place .h-floor { display: none; }
 .h-place .bgsky { position: absolute; left: 0; right: 0; top: 0; height: calc(100% - var(--floor-y) + 1.2em); }
@@ -81,7 +81,7 @@
 .h-place svg { width: 100%; height: 100%; display: block; }
 .h-place .bgsky, .h-place .bgground { display: block !important; }
 /* muebles */
-.h-props { position: absolute; inset: 0; pointer-events: none; }
+.h-props { position: absolute; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none; }
 .h-prop { position: absolute; z-index: 1; }
 .h-prop svg { height: 100%; width: auto; display: block; }
 .h-prop { transform: translateX(calc(var(--pl, 0) * -1%)); }
@@ -114,11 +114,11 @@ body.mode-desktop .flask-prop .bubbles circle { animation: none; }
 .h-scene.lights-off .h-pet { filter: brightness(.8) saturate(.9); }
 .house .poops { position: absolute; left: 0; right: 0; bottom: calc(var(--floor-y) * .35); height: 0; z-index: 5; }
 .house .poop { width: 2.7em; height: 2.4em; }
-.h-dark { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 75%, rgba(20, 22, 60, .35), rgba(10, 12, 38, .78)); opacity: 0; pointer-events: none; transition: opacity .8s; z-index: 3; }
+.h-dark { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: radial-gradient(ellipse at 50% 75%, rgba(20, 22, 60, .35), rgba(10, 12, 38, .78)); opacity: 0; pointer-events: none; transition: opacity .8s; z-index: 3; }
 .h-scene.lights-off .h-dark { opacity: 1; }
-.h-front { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
-.h-fx { position: absolute; inset: 0; pointer-events: none; z-index: 8; overflow: hidden; }
-.h-special { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.h-front { position: absolute; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none; z-index: 5; }
+.h-fx { position: absolute; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none; z-index: 8; overflow: hidden; }
+.h-special { position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 2; pointer-events: none; }
 .h-special > * { pointer-events: auto; }
 .house .fastbadge { top: auto; bottom: .4em; right: .4em; }
 
@@ -164,6 +164,19 @@ body.mode-desktop .flask-prop .bubbles circle { animation: none; }
 .h-water i { top: 0; background: #7fd3ff; animation-iteration-count: 3; }
 .h-foam { position: absolute; width: calc(1.25em * var(--s, 1)); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff, #eaf8ff 55%, #cfeeff); border: .07em solid #bfe6ff; transform: translate(-50%, -50%); z-index: 6; pointer-events: none; animation: foam-in .25s ease-out; }
 @keyframes foam-in { from { transform: translate(-50%, -50%) scale(.2); } }
+/* (2.0.3) la espuma que toca el agua de la ducha se cae y desaparece */
+.h-foam.rinse { transition: transform .3s ease-in, opacity .3s ease-in; transform: translate(-50%, 60%) scale(.5); opacity: 0; }
+/* la ducha que se arrastra: el chorro cae debajo (las gotitas sólo existen mientras la arrastrás) */
+.h-showerhead { width: 4.2em; height: 4.2em; }
+.h-showerhead > svg { position: relative; z-index: 1; }
+.h-stream { position: absolute; left: 22%; right: 22%; top: 72%; height: 9em; overflow: hidden; pointer-events: none; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+.h-stream i { position: absolute; top: -1.2em; width: .22em; height: 1.1em; border-radius: .12em; background: #7fd3ff; box-shadow: 0 0 0 .04em rgba(255, 255, 255, .6); animation: stream .42s linear infinite; }
+.h-stream i:nth-child(1) { left: 6%; animation-delay: -.05s; } .h-stream i:nth-child(2) { left: 20%; animation-delay: -.3s; } .h-stream i:nth-child(3) { left: 34%; animation-delay: -.15s; }
+.h-stream i:nth-child(4) { left: 48%; animation-delay: -.36s; } .h-stream i:nth-child(5) { left: 62%; animation-delay: -.1s; } .h-stream i:nth-child(6) { left: 76%; animation-delay: -.24s; } .h-stream i:nth-child(7) { left: 90%; animation-delay: -.02s; }
+@keyframes stream { to { transform: translateY(10em); } }
+.h-ghost.back .h-stream { display: none; }
+.h-petbox.wet .h-pet { filter: drop-shadow(0 0 .35em rgba(127, 211, 255, .95)); }
+@media (prefers-reduced-motion: reduce) { .h-stream i { animation-duration: 1.2s; } }
 /* living: notas musicales */
 .h-note { position: absolute; bottom: calc(var(--floor-y) + 6em); font-size: 1.9em; color: var(--c, #fff); animation: note-up 1.6s ease-out forwards; }
 @keyframes note-up { from { transform: translateY(0) rotate(-10deg); opacity: 0; } 20% { opacity: 1; } to { transform: translateY(-3em) rotate(12deg); opacity: 0; } }
@@ -174,7 +187,7 @@ body.mode-desktop .flask-prop .bubbles circle { animation: none; }
 .h-toast { position: absolute; left: 50%; top: 3.4em; transform: translateX(-50%); z-index: 10; max-width: 92%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: rgba(255, 255, 255, .96); border: .13em solid var(--ink); border-radius: 1em; padding: .3em .85em; font-weight: 800; font-size: .92em; box-shadow: 0 .15em 0 var(--ink); pointer-events: none; }
 .h-toast.pop { animation: toast-in .25s ease-out; }
 @keyframes toast-in { from { transform: translate(-50%, -.6em); opacity: 0; } }
-.h-flash { position: absolute; inset: 0; z-index: 40; background: #fff; animation: flash .5s ease-out forwards; pointer-events: none; }
+.h-flash { position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 40; background: #fff; animation: flash .5s ease-out forwards; pointer-events: none; }
 @keyframes flash { from { opacity: .95; } to { opacity: 0; } }
 .h-fly { position: absolute; z-index: 30; width: 3em; transform: translate(-50%, -50%); pointer-events: none; animation: fly-up 1.2s ease-out forwards; text-align: center; }
 .h-fly svg { width: 100%; display: block; }
@@ -206,7 +219,7 @@ body.mode-desktop .flask-prop .bubbles circle { animation: none; }
 .h-center { display: flex; align-items: flex-end; justify-content: center; gap: .15em; min-width: 0; }
 .h-center .b-center { flex: 1 1 auto; }
 .h-cnav { flex: none; width: 2.1em; height: 2.1em; margin-bottom: 1.25em; padding: 0; border: 0; background: none; }
-.b-center.draggable { touch-action: none; cursor: grab; }
+.h-btn.draggable { touch-action: none; cursor: grab; }
 .b-center.draggable .hb-ic { width: 3.6em; height: 3.6em; margin-top: -1.6em; }
 
 /* ---------- celular acostado, tablets y pantallas bajas ---------- */
@@ -259,7 +272,7 @@ body.mode-desktop .flask-prop .bubbles circle { animation: none; }
 .dcard { width: 24.5rem; }
 .dcard .dcard-body:has(> .dpanel:not([hidden])) { padding: 0; overflow: hidden; display: block; }
 .dcard .dpanel { display: block; position: relative; min-height: 20rem; border-top: 2px solid var(--line); }
-.dcard .dpanel .house { position: absolute; inset: 0; }
+.dcard .dpanel .house { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
 .dpet.in-house { visibility: hidden; }
 .dpet.in-house .bubble, .dpet.in-house .needicon { display: none; }
 

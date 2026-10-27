@@ -66,7 +66,7 @@
     v.render(true);
     if (N.petAnim) {
       const a = N.petAnim({ svg: () => (box.isConnected ? box.firstElementChild : null), view: () => v, ms: { active: 83, idle: 140, sleep: 400, egg: 100 }, autoStop: true, saver: saverOn });
-      v.onSvg = () => a.kick();
+      v.onSvg = () => a.kick(true);
     }
     return v;
   }
@@ -125,7 +125,8 @@
     food: { label: 'Dar de comer', icon: 'food', run: () => { goRoom('cocina'); openSheet('fridge'); } },
     energy: { label: 'A dormir', icon: 'sleep', run: () => { goRoom('dormitorio'); const r = C.act.sleep(); if (r.ok) snd.play('sleep'); say(r.msg, !r.ok); } },
     fun: { label: 'Jugar', icon: 'play', run: () => { const r = C.act.canPlay(); if (!r.ok) return say(r.msg, true); goRoom('juegos'); openSheet('games'); } },
-    hygiene: { label: 'Bañar', icon: 'bath', run: () => { goRoom('bano'); const hs = host().house; if (hs && hs.shower) hs.shower(); else doAct(C.act.bath(), 'bath'); } },
+    // (2.0.3) en Windows abre el panel: antes, con el panel cerrado, la ducha se daba adentro de la casa escondida
+    hygiene: { label: 'Bañar', icon: 'bath', run: () => { if (host().openHouse) host().openHouse(); goRoom('bano'); const hs = host().house; if (hs && hs.shower) hs.shower(); else doAct(C.act.bath(), 'bath'); } },
     poop: { label: 'Limpiar', icon: 'clean', run: () => { const r = C.act.clean(); if (r.ok) { snd.play('good'); host().onClean && host().onClean(); } } },
     sick: { label: 'Dar remedio', icon: 'med', run: () => { goRoom('laboratorio'); openSheet('shelf'); } },
     health: { label: 'Dar vitaminas', icon: 'med', run: () => { goRoom('laboratorio'); openSheet('shelf'); } },
@@ -830,7 +831,7 @@
   function ageOf(ms) { return C.ageText({ age: ms || 0 }); }
   const HELP = `<p><b>La casa:</b> arriba están tus monedas, las cinco necesidades (se llenan de verde a rojo; tocalas para ver qué hacer) y el nivel. Con las flechas al lado del nombre (o deslizando el dedo) pasás de un ambiente a otro; tocando el nombre los ves todos. Abajo hay tres botones que cambian en cada ambiente.</p>
     <ul class="help-rooms"><li><b>Cocina:</b> elegí la comida con las flechas y tocala o arrastrala hasta la boca. En la heladera está todo lo que tenés.</li>
-    <li><b>Baño:</b> pasale el jabón por encima y después la ducha.</li><li><b>Dormitorio:</b> apagá la luz para que duerma; en el armario están los accesorios.</li>
+    <li><b>Baño:</b> agarrá el jabón y pasáselo por encima para hacer espuma; después agarrá la ducha y pasala por encima para sacarle todo el jabón (o tocá los botones y lo hace solo).</li><li><b>Dormitorio:</b> apagá la luz para que duerma; en el armario están los accesorios.</li>
     <li><b>Living:</b> música para bailar, la tele (tocala) y el álbum de fotos.</li><li><b>Cuarto de juegos:</b> la pelota y todos los minijuegos.</li>
     <li><b>Laboratorio:</b> remedio, vitaminas y pociones.</li><li><b>Jardín:</b> plantá semillas, regá con la nube y cosechá comida.</li>
     <li><b>Patio:</b> pateá penales: tu mascota ataja. <b>Paseo:</b> salí a pasear por los lugares que tengas. <b>Garaje:</b> manejá el auto.</li></ul>

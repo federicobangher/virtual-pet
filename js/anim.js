@@ -22,7 +22,7 @@
      saver: () => bool,                // ahorro de batería: todavía más despacio
      extra(t),                         // algo más para animar en el mismo cuadro (las cacas, por ejemplo)
      autoStop: true,                   // se apaga sola cuando el dibujo desaparece (ventanas, juegos)
-   }) → { kick(), stop() }
+   }) → { kick(ahora), stop() }
 
    En segundo plano (app minimizada, pantalla apagada) no se dibuja nada: el reloj se detiene y vuelve
    a arrancar cuando la app se vuelve a ver. */
@@ -271,16 +271,18 @@
     }
 
     const t0 = performance.now();
-    let timer = 0, waitingVisible = false;
+    let timer = 0, waitingVisible = false, lastRun = -1e9, dueAt = 0;
     function onVisible() {
       if (document.hidden || stopped) return;
       document.removeEventListener('visibilitychange', onVisible);
       waitingVisible = false;
       loop();
     }
+    const schedule = (ms) => { clearTimeout(timer); dueAt = performance.now() + ms; timer = setTimeout(loop, ms); };
     function loop() {
       clearTimeout(timer); timer = 0;
       if (stopped) return;
+      lastRun = performance.now();
       // en segundo plano no se dibuja nada: se espera a que la app se vuelva a ver (sin despertar al procesador)
       if (document.hidden) {
         if (!waitingVisible) { waitingVisible = true; document.addEventListener('visibilitychange', onVisible); }
@@ -295,7 +297,9 @@
           next = animate(t);
           if (!next) { // no hay dibujo
             if (o.autoStop && (seen || ++misses > 20)) { stopped = true; return; }
-            next = 300;
+            // (2.0.3) escondida (panel cerrado, mascota dentro de la casa): se fija de vez en cuando; cuando vuelve
+            // a verse, kick() la despierta enseguida. Antes revisaba 3 veces por segundo para siempre.
+            next = 1500;
           } else {
             if (o.extra) o.extra(t);
             if (o.slow && o.slow()) next = Math.max(next, 250);
@@ -303,12 +307,23 @@
           }
         }
       } catch (e) { /* seguir animando igual */ }
-      timer = setTimeout(loop, Math.max(16, next));
+      schedule(Math.max(16, next));
     }
     loop();
-    // kick: para que un cambio de dibujo (otro gesto, otra cara) se anime enseguida y no al cuadro siguiente
+    // kick: para que un cambio de dibujo (otro gesto, otra cara) se anime enseguida y no al cuadro siguiente.
+    // (2.0.3) Como mucho un cuadro cada 45 ms: mover el mouse o el dedo por encima llamaba a kick() en cada
+    // movimiento (60 a 120 veces por segundo) y la mascota se redibujaba entera cada vez. En Windows, con el panel
+    // abierto, eso duplicaba el consumo de CPU sólo por pasar el mouse.
+    // kick(true): el dibujo cambió (otra cara, otro gesto): se anima ya. kick(): el mouse o el dedo se movió (para
+    // que los ojos lo sigan): alcanza con el ritmo normal de "moviéndose".
+    const GAP = Math.max(45, MS.active * 0.9);
     return {
-      kick() { if (stopped) return; if (!waitingVisible) loop(); },
+      kick(now) {
+        if (stopped || waitingVisible) return;
+        const t = performance.now(), wait = lastRun + (now ? 16 : GAP) - t;
+        if (wait <= 0) { loop(); return; }
+        if (!timer || dueAt > t + wait) schedule(wait);
+      },
       stop() { stopped = true; clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible); },
       get running() { return !stopped; },
     };

@@ -17,7 +17,11 @@
   // escalas distintas o la barra de tareas arriba, la parte de arriba (con la X y la flecha de volver)
   // podía quedar fuera de la pantalla y no había forma de cerrarlo.
   const CARD_MAXH = 720;
-  const cardMaxH = () => Math.max(260, Math.min(CARD_MAXH, wa.height - 40));
+  // (2.0.3) el alto sale del monitor donde está el panel (que puede no ser el de la mascota: el panel se puede
+  // llevar a otro monitor)
+  const cardMaxH = () => Math.max(260, Math.min(CARD_MAXH, cardArea().height - 40));
+  // margen de la ventana alrededor del panel (para que se vea su sombra)
+  const PAD = { x: 6, top: 4, bottom: 16 };
 
   const host = { kind: 'desktop' };
   let E = {}, view, house = null;
@@ -35,6 +39,7 @@
   let drag = null, cardDrag = null;
   let cardPos = null;                                // posición del panel en pantalla
   let cardMoved = false;                             // el usuario lo movió a mano
+  let cardA = null;                                  // monitor donde está el panel
   let bounds = { x: 0, y: 0, width: 0, height: 0 };  // ventana actual
 
   const PREF_KEY = 'nido.desk.v2';
@@ -55,6 +60,7 @@
     return best || primary;
   }
   const areaOfPet = (x, y) => areaAt(x + size.w / 2, y + size.h / 2);
+  const cardArea = () => cardA || wa;
   const floorOf = (a) => a.y + a.height - size.h * 0.96;
   const floorY = () => floorOf(wa);
   // Acomoda un punto (esquina de la mascota) dentro del monitor que le corresponde
@@ -108,6 +114,7 @@
     return { w: CARD_W, h: Math.min(r.height || 460, cardMaxH()) };
   }
   function placeCardAuto() {
+    if (cardA !== wa) { cardA = wa; applyCardMax(); }
     const cs = cardSize();
     let x = pos.x + size.w / 2 - cs.w / 2;
     let y = pos.y - cs.h - 8;
@@ -116,13 +123,18 @@
       x = pos.x + size.w + 10;
       if (x + cs.w > wa.x + wa.width - 8) x = pos.x - cs.w - 10;
     }
-    cardPos = clampCard(x, y);
+    cardPos = clampCard(x, y, wa);
   }
-  function clampCard(x, y) {
-    const cs = cardSize();
+  /* Acomoda el panel dentro de UN monitor. Antes siempre era el monitor de la mascota: con dos monitores el panel
+     no se podía llevar al otro (se quedaba trabado en el borde). Ahora es el monitor que se le pasa (al arrastrar,
+     el que tiene el mouse) o, si no, el que tiene la mayor parte del panel. */
+  function clampCard(x, y, a) {
+    let cs = cardSize();
+    if (!a) a = areaAt(x + cs.w / 2, y + Math.min(cs.h / 2, 60));
+    if (a !== cardA) { cardA = a; applyCardMax(); cs = cardSize(); }
     return {
-      x: Math.max(wa.x + 8, Math.min(wa.x + wa.width - cs.w - 8, x)),
-      y: Math.max(wa.y + 12, Math.min(wa.y + wa.height - cs.h - 12, y)),
+      x: Math.max(a.x + 8, Math.min(a.x + a.width - cs.w - 8, x)),
+      y: Math.max(a.y + 12, Math.min(a.y + a.height - cs.h - 12, y)),
     };
   }
   // Calcula el rectángulo de la ventana y ubica la mascota y el panel adentro.
@@ -133,11 +145,12 @@
     x = Math.max(U.x, Math.min(U.x + U.width - cw, x));
     y = Math.max(wa.y, Math.min(wa.y + wa.height - ch + TAG, y));
     let r = { x, y, w: cw, h: ch };
+    // (2.0.3) Con el panel abierto la mascota está adentro de la casa (no se ve en el escritorio): la ventana es
+    // sólo el panel. Antes abarcaba la mascota y el panel juntos: si llevabas el panel lejos (o a otro monitor)
+    // la ventana transparente se hacía enorme, cruzaba los dos monitores y gastaba mucho más.
     if (cardOpen && cardPos) {
       const cs = cardSize();
-      const x2 = Math.max(r.x + r.w, cardPos.x + cs.w), y2 = Math.max(r.y + r.h, cardPos.y + cs.h + 8);
-      r.x = Math.min(r.x, cardPos.x); r.y = Math.min(r.y, cardPos.y);
-      r.w = x2 - r.x; r.h = y2 - r.y;
+      r = { x: cardPos.x - PAD.x, y: cardPos.y - PAD.top, w: cs.w + PAD.x * 2, h: cs.h + PAD.top + PAD.bottom };
     }
     const b = { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.w), height: Math.round(r.h) };
     if (b.x !== bounds.x || b.y !== bounds.y || b.width !== bounds.width || b.height !== bounds.height) {
@@ -171,6 +184,23 @@
     const cs = cardSize();
     const off = cardPos.y < rb.y || cardPos.y + cs.h > rb.y + rb.height || cardPos.y < wa.y;
     if (off && fixTries++ < 3) { cardPos = clampCard(cardPos.x, Math.max(cardPos.y, rb.y)); layout(); }
+  }
+
+  /* Posición real del mouse en la pantalla (la de Electron). Se pide una vez por vez: si llegan movimientos
+     mientras tanto, se usa sólo el último. Sin el programa nuevo (o si falla), se usa la del navegador. */
+  let curBusy = false, curNext = null;
+  function withCursor(e, fn) {
+    if (!D.getCursor) { fn({ x: e.screenX, y: e.screenY }); return; }
+    curNext = fn;
+    if (curBusy) return;
+    curBusy = true;
+    const fx = e.screenX, fy = e.screenY;
+    D.getCursor().then((p) => {
+      curBusy = false;
+      const f = curNext; curNext = null;
+      if (f) f(p && isFinite(p.x) && isFinite(p.y) ? p : { x: fx, y: fy });
+      if (curNext) withCursor(e, curNext);
+    }).catch(() => { curBusy = false; const f = curNext; curNext = null; if (f) f({ x: fx, y: fy }); });
   }
 
   host.init = function () {
@@ -215,10 +245,13 @@
     if (p0 && p0.stage === 'egg' && pos.y < floorY() - 2) mode = 'fall';
     layout();
 
-    // arrastrar / clic sobre la mascota (en coordenadas de pantalla, porque la ventana se mueve)
+    // arrastrar / clic sobre la mascota. (2.0.3) La posición del mouse la da Electron (la misma que usa para mover
+    // la ventana): con dos monitores de distinta escala (100 % y 150 %, por ejemplo) la del navegador (screenX)
+    // no coincide fuera del monitor donde está la ventana, y la mascota saltaba o no podía pasar al otro monitor.
+    // Lo que se agarra (dónde la tocaste) se mide adentro de la ventana, que siempre es exacto.
     E.hit.addEventListener('pointerdown', (e) => {
       snd.unlock();
-      drag = { sx: e.screenX, sy: e.screenY, ox: e.screenX - pos.x, oy: e.screenY - pos.y, moved: false };
+      drag = { sx: e.screenX, sy: e.screenY, ox: e.clientX - (pos.x - bounds.x), oy: e.clientY - (pos.y - bounds.y), moved: false };
       setHold(true); // mientras se arrastra, la ventana sigue tomando el mouse aunque se salga de la mascota
       try { E.hit.setPointerCapture(e.pointerId); } catch (_) {}
       wake();
@@ -226,7 +259,7 @@
     E.hit.addEventListener('pointermove', (e) => {
       if (!drag) return;
       if (!drag.moved && Math.hypot(e.screenX - drag.sx, e.screenY - drag.sy) > 6) { drag.moved = true; mode = 'drag'; E.pet.classList.add('dragging'); }
-      if (drag.moved) { const c = clampPt(e.screenX - drag.ox, e.screenY - drag.oy); pos.x = c.x; pos.y = c.y; wa = areaOfPet(pos.x, pos.y); layout(); }
+      if (drag.moved) withCursor(e, (p) => { if (!drag) return; const c = clampPt(p.x - drag.ox, p.y - drag.oy); pos.x = c.x; pos.y = c.y; wa = areaOfPet(pos.x, pos.y); layout(); });
     });
     const endDrag = () => {
       if (!drag) return;
@@ -252,20 +285,25 @@
     if (D.onBounds) D.onBounds(onRealBounds);
     E.sheet.querySelector('.dback').addEventListener('click', () => host.sheetClose());
 
-    // mover el panel desde su encabezado
+    // mover el panel desde su encabezado (a cualquier monitor: se acomoda en el que tiene el mouse)
     E.head.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('button') || !cardPos) return;
-      cardDrag = { ox: e.screenX - cardPos.x, oy: e.screenY - cardPos.y }; setHold(true);
+      if (e.target.closest('button') || !cardPos || e.button > 0) return;
+      cardDrag = { ox: e.clientX - (cardPos.x - bounds.x), oy: e.clientY - (cardPos.y - bounds.y) }; setHold(true);
       try { E.head.setPointerCapture(e.pointerId); } catch (_) {}
     });
     E.head.addEventListener('pointermove', (e) => {
       if (!cardDrag) return;
-      cardPos = clampCard(e.screenX - cardDrag.ox, e.screenY - cardDrag.oy);
-      cardMoved = true;
-      layout();
+      withCursor(e, (p) => {
+        if (!cardDrag || !cardOpen) return;
+        cardPos = clampCard(p.x - cardDrag.ox, p.y - cardDrag.oy, areaAt(p.x, p.y));
+        cardMoved = true;
+        layout();
+      });
     });
-    E.head.addEventListener('pointerup', () => { cardDrag = null; setHold(false); });
-    E.head.addEventListener('pointercancel', () => { cardDrag = null; setHold(false); });
+    const endCardDrag = () => { if (!cardDrag) return; cardDrag = null; setHold(false); if (cardOpen && cardPos) { cardPos = clampCard(cardPos.x, cardPos.y); layout(); queueHits(); } };
+    E.head.addEventListener('pointerup', endCardDrag);
+    E.head.addEventListener('pointercancel', endCardDrag);
+    E.head.addEventListener('lostpointercapture', endCardDrag);
 
     // posición del mouse: sólo llega con "Que me siga el mouse" prendido
     D.onCursor((p) => {
@@ -367,9 +405,19 @@
   function closeCard() {
     if (!E.modal.hidden) return; // las ventanas importantes no se cierran solas
     host.sheetClose();
+    // (2.0.3) si llevaste el panel a otro monitor, la mascota sale de la casa en ese monitor (abajo del panel)
+    if (cardPos && cardA && !inside(cardA, pos.x + size.w / 2, pos.y + size.h / 2)) {
+      const p = C.state.pet;
+      const c = clampPt(cardPos.x + CARD_W / 2 - size.w / 2, floorOf(cardA));
+      pos.x = c.x; pos.y = c.y; wa = areaOfPet(pos.x, pos.y);
+      mode = p && p.stage === 'egg' ? 'fall' : 'free'; target = null; idleUntil = performance.now() + 3000; pos.vy = 0;
+      savePref();
+    }
     cardOpen = false;
     cardPos = null;
     cardMoved = false;
+    cardDrag = null;
+    cardA = null;
     E.card.hidden = true;
     E.pet.classList.remove('in-house');
     if (house) house.pause(true);
@@ -380,6 +428,7 @@
   }
 
   host.panelRoot = () => E.panel;
+  host.openHouse = () => { show(); openCard(); };
   // con la casa abierta, todo (globitos, efectos, ícono de pedidos) pasa adentro de la casa
   const inHouse = () => !!(house && cardOpen);
   host.petBox = () => (inHouse() ? house.petBox() : E.pet);
@@ -654,7 +703,7 @@
 
   // para las pruebas automáticas: poner la mascota en un punto de la pantalla
   host.debugPlace = (x, y) => { const c = clampPt(x, y); pos.x = c.x; pos.y = c.y; wa = areaOfPet(pos.x, pos.y); mode = 'free'; target = null; layout(); };
-  host.debug = () => ({ idleUntil: Math.round(idleUntil - performance.now()), pos: { x: Math.round(pos.x), y: Math.round(pos.y) }, target, mode, running, card: cardOpen, temp: view.temp, bounds, wa, fy: Math.round(floorY()), areas });
+  host.debug = () => ({ idleUntil: Math.round(idleUntil - performance.now()), pos: { x: Math.round(pos.x), y: Math.round(pos.y) }, target, mode, running, card: cardOpen, cardPos, cardA, temp: view.temp, bounds, wa, fy: Math.round(floorY()), areas });
   /* ---------- animación "a cuadros" (js/anim.js) ----------
      En vez de dejar que Chromium anime a 60 cuadros por segundo, la mascota se anima con un reloj propio:
      10 cuadros por segundo caminando, 4 quieta y 2 dormida. Se ve igual de viva y la CPU casi ni se entera. */
@@ -669,7 +718,7 @@
   function startAnim() {
     // con el panel abierto la ventana es grande: cada cuadro cuesta más, así que la mascota se anima más despacio
     petAnim = N.petAnim({ svg: () => (hiddenAll || cardOpen ? null : E.svg && E.svg.firstElementChild), view: () => view, look: deskLook, ms: { active: 100, idle: 200, sleep: 500, egg: 125 }, saver: () => !!C.state.settings.saver });
-    view.onSvg = () => petAnim.kick();
+    view.onSvg = () => petAnim.kick(true);
   }
 
   N.desktopHost = host;
