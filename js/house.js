@@ -27,6 +27,8 @@
   const spot = (room) => Object.assign({ x: 50, k: 1, up: 0 }, SPOT[room] || {});
   const NEST = `<svg viewBox="0 0 200 60" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><ellipse cx="100" cy="34" rx="86" ry="20" fill="#b9874f"/><ellipse cx="100" cy="28" rx="70" ry="13" fill="#7a5530"/><g stroke="#e0b47a" stroke-width="3" stroke-linecap="round" fill="none"><path d="M20 34 q30 -10 60 2"/><path d="M60 46 q40 -14 84 -2"/><path d="M120 30 q30 -6 62 6"/><path d="M30 42 q24 6 48 0"/><path d="M128 46 q20 4 40 -6"/></g></svg>`;
 
+  // (2.0.4) la nube de la lluvia: sin las rayitas del ícono del botón (esas, sobre el cielo, parecían líneas sueltas)
+  const RAIN_CLOUD = '<svg viewBox="0 0 120 74" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M30 68h62a22 22 0 0 0 2-44 30 30 0 0 0-57-6 24 24 0 0 0-7 50z" fill="#fff" stroke="#2a1f3d" stroke-width="5" stroke-linejoin="round"/><path d="M40 30a16 16 0 0 1 22-10" fill="none" stroke="#dbeefa" stroke-width="5" stroke-linecap="round"/></svg>';
   N.House = function (root, opts) {
     opts = opts || {};
     const H = { compact: !!opts.compact };
@@ -184,6 +186,7 @@
       E.bgground.innerHTML = N.themes.ground(id);
     }
     const places = () => Object.keys(C.BACKGROUNDS).filter((k) => !C.BACKGROUNDS[k].hidden && C.state.bgOwned[k]);
+    let slideT = 0;
     function go(id, dir) {
       if (!C.state.pet || C.state.pet.stage === 'egg') return;
       if (id === room()) return;
@@ -192,6 +195,7 @@
       if (foam) clearFoam(); // (la espuma del baño no viaja a los otros ambientes)
       E.scene.classList.remove('slide-l', 'slide-r'); void E.scene.offsetWidth;
       E.scene.classList.add(dir < 0 ? 'slide-r' : 'slide-l');
+      clearTimeout(slideT); slideT = setTimeout(() => E.scene.classList.remove('slide-l', 'slide-r'), 400); // (2.0.4) que no quede puesta
       drawRoom(true);
       snd.play('tap');
       if (view.walking) { view.walking = false; view.render(); }
@@ -394,7 +398,7 @@
         const src = drag.btn.querySelector('.hb-ic');
         if (drag.kind === 'shower') {
           // la ducha con su chorro de agua (las gotitas caen sólo mientras la arrastrás)
-          drag.ghost = h(`<div class="h-ghost h-showerhead"><div class="h-stream">${'<i></i>'.repeat(7)}</div>${src.innerHTML}</div>`);
+          drag.ghost = h(`<div class="h-ghost h-showerhead"><div class="h-stream">${'<i></i>'.repeat(9)}</div>${src.innerHTML}</div>`);
           snd.play('bath');
         } else drag.ghost = h(`<div class="h-ghost">${src.innerHTML}</div>`);
         el.appendChild(drag.ghost);
@@ -530,7 +534,7 @@
       showering = true;
       stopWalk();
       const src = E.bl.querySelector('.hb-ic');
-      const g = h(`<div class="h-ghost h-showerhead auto"><div class="h-stream">${'<i></i>'.repeat(7)}</div>${src ? src.innerHTML : ic('shower')}</div>`);
+      const g = h(`<div class="h-ghost h-showerhead auto"><div class="h-stream">${'<i></i>'.repeat(9)}</div>${src ? src.innerHTML : ic('shower')}</div>`);
       el.appendChild(g);
       const s0 = { lastRinse: 0, rinse: 0, foam0: foam, bathed: false, splash: 0, warned: false };
       snd.play('bath');
@@ -701,10 +705,21 @@
       const r = C.act.water();
       if (!r.ok) { if (r.msg) toast(r.msg); open('seeds')(); return; }
       raining = true;
-      const c = h(`<div class="h-rain"><div class="h-cloud">${ic('cloud')}</div>${Array.from({ length: 18 }, (_, i) => `<i style="left:${(6 + i * 5).toFixed(0)}%;animation-delay:${(Math.random() * 0.5).toFixed(2)}s"></i>`).join('')}</div>`);
-      // (2.0.4) la lluvia cae justo sobre los canteros (la huerta cambia de tamaño según la pantalla)
-      const pb = E.special.querySelector('.h-plots');
-      if (pb) { const sr = E.scene.getBoundingClientRect(), r0 = pb.getBoundingClientRect(); c.style.left = ((r0.left - sr.left) / sr.width * 100).toFixed(1) + '%'; c.style.width = (r0.width / sr.width * 100).toFixed(1) + '%'; }
+      // (2.0.4) La nube baja hasta arriba de la huerta y las gotas caen desde la nube hasta los canteros. Antes las
+      // gotas estaban repartidas a lo ancho (más allá de la nube), esperaban quietas en una fila hasta arrancar y
+      // caían sólo 9em: se veían como "rayitas azules" paradas en el cielo, lejos de las plantas.
+      const sr = E.scene.getBoundingClientRect(), pbEl = E.special.querySelector('.h-plots');
+      const pb = pbEl ? pbEl.getBoundingClientRect() : { left: sr.left, width: sr.width * 0.6, top: sr.top + sr.height * 0.55, height: sr.height * 0.3 };
+      const fs = parseFloat(el.style.fontSize) || 16;
+      const cw = Math.min(pb.width * 0.62, fs * 9), ch = cw * 74 / 120;
+      const topPx = Math.max(fs * 3.2, pb.top - sr.top - ch - pb.height * 0.35);
+      const fall = Math.max(fs * 3, pb.top - sr.top + pb.height * 0.45 - topPx - ch * 0.75);
+      const c = h(`<div class="h-rain"><div class="h-cloud">${RAIN_CLOUD}</div><div class="h-drops">${Array.from({ length: 14 }, (_, i) => `<i style="left:${(4 + i * 92 / 13).toFixed(1)}%;animation-delay:${(-Math.random() * 0.5).toFixed(2)}s"></i>`).join('')}</div></div>`);
+      c.style.left = (pb.left - sr.left + pb.width / 2 - cw / 2).toFixed(0) + 'px';
+      c.style.top = topPx.toFixed(0) + 'px';
+      c.style.width = cw.toFixed(0) + 'px';
+      c.style.setProperty('--fall', fall.toFixed(0) + 'px');
+      c.style.setProperty('--ch', ch.toFixed(0) + 'px');
       E.special.appendChild(c);
       snd.play('bath');
       setTimeout(() => { c.remove(); raining = false; renderPlots(true); }, 2000);
