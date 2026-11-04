@@ -47,6 +47,9 @@
       guard = false;
       if (layersOpen()) {
         handleBack();
+        // (2.0.6, modo Club) "atrás" con una ventana que no se cierra (elegir el huevo) vuelve a la página del Club;
+        // si no, un chico que entró por curiosidad quedaba encerrado en la mascota
+        if (layersOpen() && N.club) { location.href = '/'; return; }
         if (layersOpen()) { try { history.pushState({ vpet: 1 }, ''); guard = true; } catch (e) { /* nada */ } } // ventana que no se cierra
       } else if (plat.onBackExitHint) plat.onBackExitHint();
     });

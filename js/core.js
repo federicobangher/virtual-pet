@@ -3,7 +3,12 @@
   'use strict';
   const N = (window.N = window.N || {});
   const MIN = 60e3, HOUR = 3600e3, DAY = 24 * HOUR;
-  N.APP = { name: 'Virtual Pet', version: '2.0.5', author: 'Facundo Bangher' };
+  N.APP = { name: 'Virtual Pet', version: '2.0.6', author: 'Facundo Bangher' };
+  /* (2.0.6) "Modo Club": la copia de Virtual Pet que va en la página del Club de Facu (elclubdefacu.com.ar/mascota/).
+     Es para chicos de 2 a 12 años: la mascota NO se muere (si la descuidan se enferma y queda muy débil, y se
+     recupera cuando la cuidan), no hay avisos ni "instalar" aparte, y hay un botón para volver al Club.
+     Lo prende <meta name="vpet-modo" content="club"> (lo pone tools/hacer-club.js) o el dominio del Club. */
+  N.club = (() => { try { return !!document.querySelector('meta[name="vpet-modo"][content="club"]') || /(^|\.)elclubdefacu\.com\.ar$/.test(location.hostname); } catch (e) { return false; } })();
 
   const SPECIES = {
     dragon: { name: 'Dragón', fav: 'Carne asada', egg: 'Huevo escamado', hint: 'Comilón: le da hambre seguido' },
@@ -243,6 +248,7 @@
     // sin ningún cuidado se muere en ~7 días (antes era ~1 día)
     healthDmg: { sick: 0.2, food: 0.2, energy: 0.12, hygiene: 0.12, fun: 0.08 },
     healthRegen: 4,
+    clubMinHealth: 5, // (modo Club) la salud nunca baja de acá
     lockout: 0, // después de despedirla se puede empezar enseguida con un huevo nuevo (antes había que esperar 24 h)
     maxPoops: 4,
     shinyCare: 62,
@@ -611,8 +617,9 @@
     // crecimiento
     checkGrowth(p, events);
 
-    // muerte
-    if (p.health <= 0) {
+    // muerte (en el modo Club no se muere: queda muy débil, con la salud al mínimo, hasta que la cuidan)
+    if (N.club && p.health < R.clubMinHealth) p.health = R.clubMinHealth;
+    if (p.health <= 0 && !N.club) {
       p.dead = true; p.sleeping = false;
       p.cause = p.sick ? 'enfermedad' : p.food <= 0 ? 'hambre' : 'descuido';
       events.push({ type: 'death' });

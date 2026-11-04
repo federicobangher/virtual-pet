@@ -690,22 +690,23 @@
         const owned = Object.keys(S.owned);
         const achList = C.ACHIEVEMENTS;
         const nAch = achList.filter((a) => S.achievements[a.id]).length, totAch = achList.length;
+        const club = !!N.club;
         setHTML(node, `
-          ${installHTML()}
+          ${club ? `<section class="club-back"><a class="btn primary big" href="/" data-club-back>${ic('left')} Volver al Club de Facu</a></section>` : installHTML()}
           <section class="row more-top"><button type="button" class="btn" data-open="achievements">${ic('star')} Logros <span class="cnt">${nAch}/${totAch}</span></button><button type="button" class="btn" data-open="album">${ic('book')} Álbum <span class="cnt">${S.album.length}</span></button></section>
           ${p && !p.dead ? `<section><h4>${ic('pencil')} Nombre</h4><form class="rename"><input id="rename" maxlength="16" value="${esc(p.name)}" aria-label="Nombre de la mascota"><button class="btn" type="submit">Cambiar</button></form></section>` : ''}
           <section class="row more-top"><button type="button" class="btn" data-open="wardrobe">${ic('shirt')} Armario <span class="cnt">${owned.length}/${C.WEAR.length}</span></button><button type="button" class="btn" data-open="rooms">${ic('pin')} Ambientes</button></section>
           <section><h4>${ic('gear')} Ajustes</h4>
             ${toggle('sound', 'Sonido', st.sound)}
-            ${toggle('notify', desk ? 'Avisos de Windows cuando necesita algo' : plat.canSchedule ? 'Avisos cuando necesita algo (aunque la app esté cerrada)' : 'Avisos cuando necesita algo', st.notify)}
+            ${club ? '' : toggle('notify', desk ? 'Avisos de Windows cuando necesita algo' : plat.canSchedule ? 'Avisos cuando necesita algo (aunque la app esté cerrada)' : 'Avisos cuando necesita algo', st.notify)}
             ${desk ? toggle('saver', 'Ahorro de energía', st.saver, 'La mascota se anima más despacio y la compu trabaja menos.') : toggle('saver', 'Ahorro de batería', st.saver, 'La mascota se mueve un poco menos. Se prende solo con poca batería.')}
             ${desk ? toggle('follow', 'Que me siga el puntero del mouse', st.follow) : ''}
             ${desk ? toggle('onTop', 'Siempre visible (arriba de las ventanas)', st.onTop !== false) : ''}
             ${desk ? toggle('wander', 'Que pasee sola por todo el escritorio', st.wander) : ''}
             ${desk ? toggle('autostart', 'Abrir Virtual Pet al iniciar Windows', !!st.autostart) : ''}
           </section>
-          <section><h4>${ic('book')} Recuerdos</h4>${S.memorial.length ? '<ul class="memo">' + S.memorial.map((m) => `<li><b>${esc(m.name)}</b> · ${C.SPECIES[m.species].name} · vivió ${ageOf(m.age)} <small>${new Date(m.diedAt).toLocaleDateString()}</small></li>`).join('') + '</ul>' : '<p class="note">Acá van a quedar las mascotas que ya no están.</p>'}</section>
-          <section><h4>${ic('help')} Cómo se juega</h4><div class="help">${HELP}</div></section>
+          ${club ? '' : `<section><h4>${ic('book')} Recuerdos</h4>${S.memorial.length ? '<ul class="memo">' + S.memorial.map((m) => `<li><b>${esc(m.name)}</b> · ${C.SPECIES[m.species].name} · vivió ${ageOf(m.age)} <small>${new Date(m.diedAt).toLocaleDateString()}</small></li>`).join('') + '</ul>' : '<p class="note">Acá van a quedar las mascotas que ya no están.</p>'}</section>`}
+          <section><h4>${ic('help')} Cómo se juega</h4><div class="help">${club ? HELP_CLUB : HELP}</div></section>
           <section class="backup"><h4>${ic('gift')} Copia de seguridad</h4>
             <p class="note">Guardá tu partida en un archivo para no perderla o pasarla a otra computadora.</p>
             <div class="row"><button type="button" class="btn" data-export>Guardar copia</button><button type="button" class="btn" data-import>Recuperar copia</button></div>
@@ -846,6 +847,8 @@
     <p>Si necesita algo urgente, te viene a buscar. Cuando está tranquila bosteza, se estira, se rasca y persigue mariposas.</p>
     <p>En el menú (las tres rayitas, arriba a la derecha) están los <b>logros</b>, el <b>álbum</b>, los <b>ajustes</b> y la <b>copia de seguridad</b> de la partida. Con la cámara le sacás una foto.</p>
     <p>Entrá todos los días para cobrar el <b>premio diario</b>: cuantos más días seguidos, más monedas.</p>`;
+  // (modo Club) la ayuda sin la parte de la muerte
+  const HELP_CLUB = HELP.replace(/<p>Si la descuidás se enferma\.[\s\S]*?<\/p>/, '<p>Si la descuidás se enferma y se pone muy débil. Dale el remedio, de comer y mucho cariño, y se recupera.</p>');
 
   /* ============ minijuegos ============ */
   function startGame(id) {
@@ -903,7 +906,7 @@
       <div class="eggs">${Object.keys(C.SPECIES).map((k) => `<button type="button" class="egg-pick" data-sp="${k}"><span class="ep-art">${art.eggSVG({ species: k, progress: 0, warmth: 30 })}</span><b>${C.SPECIES[k].name}</b><small>${C.SPECIES[k].hint}</small></button>`).join('')}</div>
       <label class="field"><span>¿Cómo se va a llamar?</span><input id="adopt-name" maxlength="16" placeholder="Escribí un nombre" autocomplete="off"></label>
       <p class="err" hidden></p>
-      <button type="button" class="btn primary big" data-ok disabled>Empezar</button></div>`);
+      <button type="button" class="btn primary big" data-ok disabled>Empezar</button>${N.club ? `<a class="club-link" href="/">${ic('left')} Volver al Club de Facu</a>` : ''}</div>`);
     node.addEventListener('click', (e) => {
       const b = e.target.closest('.egg-pick'); if (!b) return;
       snd.unlock(); snd.play('tap');
@@ -1062,7 +1065,7 @@
      calculados con el mismo motor del juego, y al volver se borran. De noche (22 a 8) no suena nada:
      los avisos que caerían de noche se pasan a las 8 de la mañana. */
   function scheduleAway() {
-    if (!plat.canSchedule) return;
+    if (!plat.canSchedule || N.club) return;
     const S = C.state, p = S.pet;
     if (!S.settings.notify || !p || p.dead) { plat.cancelScheduled(); return; }
     const t = Date.now(), items = [], used = {};
@@ -1091,7 +1094,7 @@
   }
   function notify(need) {
     const S = C.state;
-    if (!S.settings.notify || !S.pet) return;
+    if (N.club || !S.settings.notify || !S.pet) return; // (modo Club: sin avisos)
     const t = Date.now();
     if (lastNotify[need.id] && t - lastNotify[need.id] < 30 * C.MIN) return;
     lastNotify[need.id] = t;

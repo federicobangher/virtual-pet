@@ -744,3 +744,8 @@ button.meter:focus-visible { outline: 2px solid var(--plum); outline-offset: 1px
 .dcard.gaming .dcard-body { overflow: hidden; }
 .dcard.gaming .game-host { height: calc(var(--card-maxh, 600px) - 12rem); min-height: 18rem; }
 .dcard.gaming .g-top { font-size: .9rem; }
+
+/* (2.0.6) modo Club de Facu: volver a la página del Club */
+.club-back .btn { width: 100%; justify-content: center; text-decoration: none; }
+.club-link { display: inline-flex; align-items: center; gap: .3rem; margin-top: .7rem; color: var(--plum, #5b3f8c); font-weight: 800; text-decoration: none; }
+.club-link .ic { width: 1.1rem; height: 1.1rem; }
