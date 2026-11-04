@@ -107,6 +107,11 @@ body.mode-desktop .flask-prop .bubbles circle { animation: none; }
 .h-petbox { position: absolute; left: 0; bottom: calc(var(--floor-y) - 1.1em); width: 12em; aspect-ratio: 240 / 200; z-index: 4; transform: translateX(-50%); will-change: transform; }
 .h-petbox[data-stage="egg"] { bottom: calc(var(--floor-y) - .3em); }
 .h-pet { display: block; width: 100%; height: 100%; padding: 0; border: 0; background: none; border-radius: 30%; cursor: pointer; touch-action: none; }
+/* (2.0.4) la mascota sólo toma el toque donde está dibujada: lo transparente de su caja (que es un rectángulo grande)
+   tapaba el cantero del jardín, la tele, la heladera y el estante. El globito y el ícono de pedidos se siguen tocando. */
+.h-petbox, .h-pet, .h-pet svg { pointer-events: none; }
+.h-pet svg * { pointer-events: visiblePainted; }
+.h-petbox .bubble, .h-petbox .bubble *, .h-petbox .needicon { pointer-events: auto; }
 .h-pet svg { width: 100%; height: 100%; }
 .h-petbox .bubble { z-index: 9; font-size: max(.8em, 13px); bottom: var(--bub, 85%); }
 .h-petbox[data-stage="egg"] .bubble { bottom: 70%; }
@@ -122,7 +127,14 @@ body.mode-desktop .flask-prop .bubbles circle { animation: none; }
 .h-special > * { pointer-events: auto; }
 .house .fastbadge { top: auto; bottom: .4em; right: .4em; }
 
-/* patio: arco de fútbol */
+/* patio: arco de fútbol. (2.0.4) Las zonas para elegir dónde patear van adelante de la mascota (que ataja) */
+.h-gzones { position: absolute; left: 50%; bottom: calc(var(--floor-y) - .4em); width: min(94%, calc(var(--petw, 10em) * 2.4)); aspect-ratio: 300 / 130; transform: translateX(-50%); pointer-events: none; }
+.h-gzone { position: absolute; width: 29%; height: 40%; padding: 0; border: .12em dashed rgba(255, 255, 255, .55); border-radius: 50%; background: rgba(255, 255, 255, .08); pointer-events: auto; cursor: crosshair; transition: background .15s, border-color .15s; }
+.h-gzone:hover, .h-gzone:focus-visible { background: rgba(255, 255, 255, .3); border-color: #fff; }
+.h-gzone.z0 { left: 6%; top: 14%; } .h-gzone.z1 { left: 35.5%; top: 14%; } .h-gzone.z2 { left: 65%; top: 14%; }
+.h-gzone.z3 { left: 6%; top: 56%; } .h-gzone.z4 { left: 35.5%; top: 56%; } .h-gzone.z5 { left: 65%; top: 56%; }
+.h-gzones.hint .h-gzone { animation: gz-hint .5s ease-in-out 3; }
+@keyframes gz-hint { 50% { background: rgba(255, 255, 255, .45); border-color: #fff; } }
 .h-goal { position: absolute; left: 50%; bottom: calc(var(--floor-y) - .4em); width: min(94%, calc(var(--petw, 10em) * 2.4)); aspect-ratio: 300 / 130; transform: translateX(-50%); pointer-events: none !important; }
 .h-goal svg { width: 100%; height: 100%; display: block; }
 .h-goal.shake { animation: goal-shake .45s ease-out; }
@@ -146,7 +158,8 @@ body.mode-desktop .flask-prop .bubbles circle { animation: none; }
 .h-ball { position: absolute; left: 16%; bottom: calc(var(--floor-y) - .4em); width: 2.9em; height: 2.9em; padding: 0; border: 0; background: none; z-index: 6; cursor: pointer; }
 .h-ball svg { width: 100%; height: 100%; display: block; }
 /* jardín: huerta */
-.h-plots { position: absolute; left: 1%; width: 72%; bottom: calc(var(--floor-y) * .12); display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: auto auto; row-gap: 0; align-items: end; z-index: 5; pointer-events: auto; }
+.h-plots { position: absolute; left: 1%; width: min(58%, calc(var(--sch, 30em) * .62)); bottom: calc(var(--floor-y) * .12); display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: auto auto; row-gap: 0; align-items: end; z-index: 5; pointer-events: auto; }
+.house[data-room="jardin"] .h-special { z-index: 5; } /* (2.0.4) los canteros arriba de la mascota: siempre se pueden tocar */
 .h-plot { grid-column: span 2; aspect-ratio: .72; padding: 0; border: 0; background: none; cursor: pointer; position: relative; margin-bottom: -18%; }
 .h-plot:nth-child(4) { grid-column: 2 / span 2; margin-bottom: 0; }
 .h-plot:nth-child(5) { grid-column: 4 / span 2; margin-bottom: 0; }
@@ -156,18 +169,17 @@ body.mode-desktop .flask-prop .bubbles circle { animation: none; }
 .h-rain { position: absolute; left: 0; width: 70%; top: 12%; bottom: var(--floor-y); z-index: 7; pointer-events: none; }
 .h-cloud { width: 42%; margin: 0 auto; animation: cloud-in .35s ease-out; }
 .h-cloud svg { width: 100%; display: block; }
-.h-rain i, .h-water i { position: absolute; top: 3.2em; width: .2em; height: 1em; border-radius: .12em; background: #5fb4f0; animation: drop .55s linear 4 both; }
+.h-rain i { position: absolute; top: 3.2em; width: .2em; height: 1em; border-radius: .12em; background: #5fb4f0; animation: drop .55s linear 4 both; }
 @keyframes drop { from { transform: translateY(0); opacity: 1; } to { transform: translateY(9em); opacity: .2; } }
 @keyframes cloud-in { from { transform: translateY(-80%); opacity: 0; } }
 /* baño: agua de la ducha y espuma del jabón */
-.h-water { position: absolute; left: 8%; right: 8%; top: -55%; bottom: 10%; z-index: 7; pointer-events: none; overflow: hidden; }
-.h-water i { top: 0; background: #7fd3ff; animation-iteration-count: 3; }
 .h-foam { position: absolute; width: calc(1.25em * var(--s, 1)); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff, #eaf8ff 55%, #cfeeff); border: .07em solid #bfe6ff; transform: translate(-50%, -50%); z-index: 6; pointer-events: none; animation: foam-in .25s ease-out; }
 @keyframes foam-in { from { transform: translate(-50%, -50%) scale(.2); } }
 /* (2.0.3) la espuma que toca el agua de la ducha se cae y desaparece */
 .h-foam.rinse { transition: transform .3s ease-in, opacity .3s ease-in; transform: translate(-50%, 60%) scale(.5); opacity: 0; }
 /* la ducha que se arrastra: el chorro cae debajo (las gotitas sólo existen mientras la arrastrás) */
 .h-showerhead { width: 4.2em; height: 4.2em; }
+.h-showerhead.auto { transition: none; }
 .h-showerhead > svg { position: relative; z-index: 1; }
 .h-stream { position: absolute; left: 22%; right: 22%; top: 72%; height: 9em; overflow: hidden; pointer-events: none; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
 .h-stream i { position: absolute; top: -1.2em; width: .22em; height: 1.1em; border-radius: .12em; background: #7fd3ff; box-shadow: 0 0 0 .04em rgba(255, 255, 255, .6); animation: stream .42s linear infinite; }
@@ -249,10 +261,13 @@ body.mode-desktop .flask-prop .bubbles circle { animation: none; }
 .cards.rooms .card { background: color-mix(in srgb, var(--rc, #fff) 30%, #fff); }
 .cards.rooms .card.on { outline: 3px solid var(--plum); }
 .shop { display: grid; gap: .6rem; }
-.shop .tabs { position: sticky; top: -.5rem; z-index: 3; display: flex; gap: .35rem; overflow-x: auto; padding: .4rem 0 .5rem; margin-top: -.4rem; background: var(--paper); scrollbar-width: none; }
+/* (2.0.4) las pestañas se acomodan en una o dos filas: antes se deslizaban de costado y con el mouse (Windows) no se
+   llegaba a Ropa, Lugares ni Juegos, y en el celular no se veía que había más */
+.shop .tabs { position: sticky; top: -.5rem; z-index: 3; display: grid; grid-template-columns: repeat(3, 1fr); gap: .35rem; padding: .4rem 0 .5rem; margin-top: -.4rem; background: var(--paper); }
 .shop .tabs::-webkit-scrollbar { display: none; }
-.dsheet .shop .tabs { top: 2.6rem; }
-.tab { flex: none; display: inline-flex; align-items: center; gap: .3rem; border: 2px solid var(--ink); border-radius: 99px; background: #fff; padding: .3rem .7rem; font-weight: 800; box-shadow: 0 2px 0 var(--ink); }
+@media (min-width: 640px) { .shop .tabs { grid-template-columns: repeat(6, 1fr); } }
+.dsheet .shop .tabs { top: 2.6rem; grid-template-columns: repeat(3, 1fr); }
+.tab { flex: none; display: inline-flex; align-items: center; justify-content: center; gap: .3rem; min-width: 0; white-space: nowrap; border: 2px solid var(--ink); border-radius: 99px; background: #fff; padding: .3rem .7rem; font-weight: 800; box-shadow: 0 2px 0 var(--ink); }
 .tab.on { background: var(--yolk); }
 .tab .ic { width: 1.05rem; height: 1.05rem; }
 .shop-body { display: grid; gap: .55rem; }

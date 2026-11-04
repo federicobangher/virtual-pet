@@ -23,7 +23,7 @@
     { k: 'fun', icon: 'play', label: 'Diversión' },
   ];
   // Dónde se para la mascota en cada ambiente (x en %, tamaño relativo, cuánto más arriba del piso)
-  const SPOT = { jardin: { x: 80, k: 0.6 }, patio: { x: 50, k: 0.68, up: 0.8 }, garaje: { x: 50, k: 0.62, up: -0.3, upW: 0.15 }, cocina: { x: 56, k: 0.9 }, paseo: { x: 50, k: 0.92 }, bano: { x: 52, k: 0.9 }, laboratorio: { x: 54, k: 0.9 } };
+  const SPOT = { jardin: { x: 100, k: 0.6 }, patio: { x: 50, k: 0.68, up: 0.8 }, garaje: { x: 50, k: 0.62, up: -0.3, upW: 0.15 }, cocina: { x: 56, k: 0.9 }, paseo: { x: 50, k: 0.92 }, bano: { x: 52, k: 0.9 }, laboratorio: { x: 54, k: 0.9 } };
   const spot = (room) => Object.assign({ x: 50, k: 1, up: 0 }, SPOT[room] || {});
   const NEST = `<svg viewBox="0 0 200 60" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><ellipse cx="100" cy="34" rx="86" ry="20" fill="#b9874f"/><ellipse cx="100" cy="28" rx="70" ry="13" fill="#7a5530"/><g stroke="#e0b47a" stroke-width="3" stroke-linecap="round" fill="none"><path d="M20 34 q30 -10 60 2"/><path d="M60 46 q40 -14 84 -2"/><path d="M120 30 q30 -6 62 6"/><path d="M30 42 q24 6 48 0"/><path d="M128 46 q20 4 40 -6"/></g></svg>`;
 
@@ -91,11 +91,14 @@
       const v = fs.toFixed(2) + 'px';
       if (el.style.fontSize !== v) el.style.fontSize = v;
       sceneW = E.scene.clientWidth; sceneH = E.scene.clientHeight;
+      setSch();
       const th = E.top.offsetHeight + 'px';
       if (el.style.getPropertyValue('--toph') !== th) el.style.setProperty('--toph', th);
       sizePet();
       placePet(curX(), 0, true);
     }
+    // (2.0.4) el alto de la escena en px, para medir cosas que dependen del alto (la huerta en pantallas anchas)
+    function setSch() { const v = sceneH + 'px'; if (sceneH && el.style.getPropertyValue('--sch') !== v) el.style.setProperty('--sch', v); }
     function sizePet() {
       const sp = spot(room());
       const p = C.state.pet;
@@ -105,6 +108,9 @@
       if (p && !egg) w *= p.stage === 'baby' ? 1.15 : p.stage === 'young' ? 1.05 : 1;
       // garaje: el auto mide 1,75 veces la mascota y tiene que entrar entero en la pantalla
       if (room() === 'garaje' && !egg) w = Math.min(w, (sceneW * 0.9) / 1.75);
+      // (2.0.4) jardín: la mascota va a la derecha, en el lugar que dejan los canteros (antes se paraba encima del
+      // tercero y no se podía tocar). El ancho de la huerta es el mismo que calcula house.css (.h-plots).
+      if (room() === 'jardin' && !egg) { const plots = Math.min(sceneW * 0.58, sceneH * 0.62) + sceneW * 0.02; w = Math.min(w, Math.max(sceneW * 0.34, (sceneW - plots) * 0.9)); }
       w = Math.max(90, Math.round(w));
       const v = w + 'px';
       if (E.petbox.style.width !== v) E.petbox.style.width = v;
@@ -141,7 +147,11 @@
       E.props.innerHTML = HA.props(id).map(([svg, left, bottom, hgt, cls]) =>
         `<div class="h-prop ${cls || ''}" style="left:${left}%;--pl:${left};bottom:calc(var(--floor-y) + ${bottom}em);height:${hgt}em">${svg}</div>`).join('');
       E.special.innerHTML = ''; E.front.innerHTML = '';
-      if (id === 'patio') E.special.innerHTML = `<div class="h-goal">${HA.goalSVG()}</div>`;
+      if (id === 'patio') {
+        E.special.innerHTML = `<div class="h-goal">${HA.goalSVG()}</div>`;
+        // (2.0.4) se elige dónde patear tocando el arco (antes el tiro salía siempre al azar; en Windows no se podía elegir)
+        E.front.innerHTML = `<div class="h-gzones">${[0, 1, 2, 3, 4, 5].map((i) => `<button type="button" class="h-gzone z${i}" data-z="${i}" aria-label="Patear ${['arriba a la izquierda', 'arriba al medio', 'arriba a la derecha', 'abajo a la izquierda', 'abajo al medio', 'abajo a la derecha'][i]}"></button>`).join('')}</div>`;
+      }
       if (id === 'garaje') {
         E.special.innerHTML = `<div class="h-gdoor">${HA.garageDoorSVG()}</div><div class="h-gtools">${HA.toolsSVG()}</div><div class="h-car back">${HA.carSVG(false)}</div>`;
         E.front.innerHTML = `<div class="h-car front">${HA.carSVG(true)}</div><div class="h-gcone">${HA.coneSVG()}</div><div class="h-gtires">${HA.tiresSVG()}</div>`;
@@ -152,12 +162,13 @@
       drawPlace();
       E.nest.hidden = !egg;
       setHidden(E.prev, egg); setHidden(E.next, egg);
+      sizePet(); // (2.0.4) primero el tamaño: placePet lo usa para que no se salga por los costados
       x = spot(id).x; placePet(x, 0, true);
       if (x > 62 && view.dir !== -1) { view.dir = -1; view.render(); } // del lado derecho, mira hacia el centro
-      sizePet();
       buttons(true);
       renderPoops(true);
       if (id === 'jardin') renderPlots();
+      clampBubble();
     }
     function drawPlace() {
       const isP = room() === 'paseo';
@@ -303,7 +314,7 @@
       juegos: { left: { ic: 'games', lb: 'Juegos', run: () => games() }, center: { ic: 'ball', lb: 'Pelota', run: () => toggleBall() }, right: SHOP('juegos') },
       laboratorio: { left: { ic: 'shelf', lb: 'Estante', run: open('shelf') }, center: 'meds', right: SHOP('salud') },
       jardin: { left: { ic: 'seeds', lb: 'Semillas', run: open('seeds') }, center: { ic: 'cloud', lb: 'Nube', run: () => rain() }, right: SHOP('huerta') },
-      patio: { left: { ic: 'games', lb: 'Juegos', run: () => games() }, center: 'kick', right: SHOP('juegos') },
+      patio: { left: { ic: 'games', lb: 'Juegos', run: () => games() }, center: 'kick', right: SHOP('juegos') },  // (el arco se toca donde querés patear)
       paseo: { left: { ic: 'places', lb: 'Lugares', run: open('places') }, center: { ic: 'walk', lb: 'Pasear', run: () => stroll() }, right: SHOP('lugares') },
       garaje: { left: { ic: 'horn', lb: 'Bocina', run: () => honk() }, center: { ic: 'wheel', lb: 'Manejar', run: () => drive() }, right: SHOP('juegos') },
     };
@@ -339,7 +350,7 @@
       } else if (center === 'lamp') {
         center = p && p.sleeping ? { ic: 'lampOff', lb: 'Prender', run: () => toggleSleep() } : { ic: 'lampOn', lb: 'Apagar', run: () => toggleSleep() };
       } else if (center === 'kick') {
-        center = { ic: 'soccer', lb: 'Goles: ' + (C.state.stats.goals || 0), run: () => kick() };
+        center = { ic: 'soccer', lb: 'Goles: ' + (C.state.stats.goals || 0), run: () => aimHint() };
       }
       const key = [room(), egg, !!p, p && p.dead, center && (center.key || center.lb), center && center.ic].join('|');
       if (!force && key === btnKey) return;
@@ -370,7 +381,7 @@
     let drag = null;
     function dragStart(b, e) {
       const kind = b._drag;
-      if (!kind || drag) return;
+      if (!kind || drag || (kind === 'shower' && showering)) return;
       if (kind === 'food' || kind === 'med') { if (!curCenter || !curCenter.drag) return; }
       drag = { kind, btn: b, id: kind === 'food' ? foodSel : kind === 'med' ? medSel : kind, sx: e.clientX, sy: e.clientY, cx: e.clientX, cy: e.clientY, moving: false, ghost: null, lastSoap: 0, lastRinse: 0, rinse: 0, foam0: foam, bathed: false, splash: 0 };
       try { b.setPointerCapture(e.pointerId); } catch (_) { /* nada */ }
@@ -433,26 +444,27 @@
       return cx > r.left + r.width * 0.12 && cx < r.right - r.width * 0.12 && cy > r.top + r.height * 0.05 && cy < r.bottom;
     }
     // El agua cae desde la ducha hacia abajo: moja lo que tenga debajo (en una franja del ancho del chorro)
-    function rinseAt(cx, cy, t) {
+    function rinseAt(cx, cy, t, d) {
+      d = d || drag;
       const p = C.state.pet;
       const pr = E.petbox.getBoundingClientRect();
       const half = Math.max(18, pr.width * 0.16);
       const wet = p && !p.dead && p.stage !== 'egg' && cx > pr.left + pr.width * 0.08 && cx < pr.right - pr.width * 0.08 && cy < pr.bottom - pr.height * 0.1;
       setCls(E.petbox, 'wet', wet);
-      if (!wet) { drag.lastRinse = 0; return; }
-      if (p.sleeping) { if (!drag.warned) { drag.warned = true; H.bubble('Está durmiendo.', 1600, true); } return; }
-      if (drag.lastRinse) drag.rinse += Math.min(120, t - drag.lastRinse);
-      drag.lastRinse = t;
+      if (!wet) { d.lastRinse = 0; return; }
+      if (p.sleeping) { if (!d.warned) { d.warned = true; H.bubble('Está durmiendo.', 1600, true); } return; }
+      if (d.lastRinse) d.rinse += Math.min(120, t - d.lastRinse);
+      d.lastRinse = t;
       // la espuma que queda debajo del chorro se va con el agua
       E.petbox.querySelectorAll('.h-foam:not(.rinse)').forEach((f) => {
         const fr = f.getBoundingClientRect(), fx = fr.left + fr.width / 2, fy = fr.top + fr.height / 2;
         if (Math.abs(fx - cx) < half + fr.width / 2 && fy > cy - fr.height) { f.classList.add('rinse'); foam = Math.max(0, foam - 1); setTimeout(() => f.remove(), 320); }
       });
-      if (t - drag.splash > 700) { drag.splash = t; snd.play('bath'); if (!drag.bathed && Math.random() < 0.5) view.setTemp('happy', 900); }
+      if (t - d.splash > 700) { d.splash = t; snd.play('bath'); if (!d.bathed && Math.random() < 0.5) view.setTemp('happy', 900); }
       // bañada: sin espuma (si tenía) o un ratito de agua (si no tenía)
-      const need = drag.foam0 > 0 || foam > 0 ? 500 : 1400;
-      if (!drag.bathed && foam === 0 && drag.rinse >= need) {
-        drag.bathed = true;
+      const need = d.foam0 > 0 || foam > 0 ? 500 : 1400;
+      if (!d.bathed && foam === 0 && d.rinse >= need) {
+        d.bathed = true;
         const r = C.act.bath();
         if (r.ok) { snd.play('happy'); UI().fx(E.petbox, 'bath'); H.bubble(r.msg, 2000); }
         else if (r.msg) H.bubble(r.msg, 1600);
@@ -509,21 +521,46 @@
       view.setTemp('happy', 1500);
     }
     function clearFoam() { E.petbox.querySelectorAll('.h-foam').forEach((f) => f.remove()); foam = 0; }
+    // (2.0.4) Tocar "Ducha" sin arrastrar: la misma ducha del arrastre pasa sola por encima de la mascota, de un lado
+    // al otro, y le saca la espuma. Antes caía una "lluvia" sobre toda la mascota (la de la 2.0.2), que en el
+    // celular se veía cada vez que tocabas el botón.
     let showering = false;
     function shower() {
-      const p = alive('Está durmiendo.'); if (!p || showering) return;
+      const p = alive('Está durmiendo.'); if (!p || showering || drag) return;
       showering = true;
-      const w = h(`<div class="h-water">${Array.from({ length: 22 }, (_, i) => `<i style="left:${(4 + i * 4.4).toFixed(1)}%;animation-delay:${(Math.random() * 0.6).toFixed(2)}s"></i>`).join('')}</div>`);
-      E.petbox.appendChild(w);
+      stopWalk();
+      const src = E.bl.querySelector('.hb-ic');
+      const g = h(`<div class="h-ghost h-showerhead auto"><div class="h-stream">${'<i></i>'.repeat(7)}</div>${src ? src.innerHTML : ic('shower')}</div>`);
+      el.appendChild(g);
+      const s0 = { lastRinse: 0, rinse: 0, foam0: foam, bathed: false, splash: 0, warned: false };
       snd.play('bath');
-      view.setTemp('happy', 1800);
-      setTimeout(() => {
-        w.remove(); clearFoam(); showering = false;
-        const r = C.act.bath();
-        if (r.ok) { snd.play('happy'); UI().fx(E.petbox, 'bath'); H.bubble(r.msg, 2000); }
-        else if (r.msg) H.bubble(r.msg, 1600);
-        view.setAct('shake', 1300);
-      }, 1700);
+      view.setTemp('happy', 2400);
+      const DUR = 2200, t0 = performance.now();
+      const finish = () => {
+        g.classList.add('back'); setTimeout(() => g.remove(), 260);
+        setCls(E.petbox, 'wet', false);
+        clearFoam(); showering = false;
+        if (!s0.bathed) {
+          const r = C.act.bath();
+          if (r.ok) { snd.play('happy'); UI().fx(E.petbox, 'bath'); H.bubble(r.msg, 2000); }
+          else if (r.msg) H.bubble(r.msg, 1600);
+        }
+        const q = C.state.pet; if (q && !q.sleeping) view.setAct('shake', 1300);
+      };
+      const tick = () => {
+        if (!el.isConnected || room() !== 'bano') { g.remove(); setCls(E.petbox, 'wet', false); showering = false; return; }
+        const t = performance.now(), k = Math.min(1, (t - t0) / DUR);
+        const er = el.getBoundingClientRect(), pr = E.petbox.getBoundingClientRect();
+        // va y viene dos veces, a la altura de la cabeza (el chorro cae sobre todo el cuerpo)
+        const sweep = 0.5 - 0.5 * Math.cos(k * Math.PI * 3);
+        const cx = pr.left + pr.width * (0.14 + 0.72 * sweep), cy = pr.top + pr.height * (0.02 + 0.12 * Math.sin(k * Math.PI * 6));
+        g.style.transform = `translate(${(cx - er.left).toFixed(0)}px, ${(cy - er.top).toFixed(0)}px) translate(-50%, -50%)`;
+        H.lookAt(cx, cy, 400);
+        rinseAt(cx, cy, t, s0);
+        anim.kick();
+        if (k < 1) requestAnimationFrame(tick); else finish();
+      };
+      requestAnimationFrame(tick);
     }
     H.shower = shower;
     function toggleSleep() {
@@ -607,23 +644,41 @@
       if (!r.ok) { H.bubble(r.msg || 'Ahora no puede jugar', 2200, true); return; }
       snd.play('tap'); UI().openSheet('games');
     }
-    // Patio: penales (la mascota ataja)
-    let kicking = false;
-    function kick() {
+    // Patio: penales. Tocás el arco donde querés patear y la mascota ataja (se tira a un lado; a veces adivina)
+    let kicking = false, kickHist = [];
+    E.front.addEventListener('click', (e) => {
+      const z = e.target.closest('.h-gzone'); if (!z) return;
+      snd.unlock(); kick(+z.dataset.z, z);
+    });
+    function aimHint() {
+      const p = alive('Shh… está durmiendo'); if (!p) return;
+      snd.play('tap');
+      toast('Tocá el arco donde quieras patear');
+      const zs = E.front.querySelector('.h-gzones');
+      if (zs) { zs.classList.remove('hint'); void zs.offsetWidth; zs.classList.add('hint'); }
+    }
+    function kick(zone, zoneEl) {
       const p = alive('Shh… está durmiendo'); if (!p || kicking) return;
       const sr = E.scene.getBoundingClientRect(), goal = E.special.querySelector('.h-goal');
       if (!goal) return;
+      if (zone == null || !(zone >= 0 && zone <= 5)) zone = Math.floor(Math.random() * 6);
       kicking = true;
-      const gr = goal.getBoundingClientRect();
-      const side = Math.floor(Math.random() * 3) - 1, high = Math.random() < 0.5;
-      const tx = gr.left + gr.width * (0.5 + side * 0.33) - sr.left, ty = gr.top + gr.height * (high ? 0.3 : 0.72) - sr.top;
+      const col = zone % 3, row = Math.floor(zone / 3), side = col - 1, high = row === 0;
+      const gr = goal.getBoundingClientRect(), zr = zoneEl ? zoneEl.getBoundingClientRect() : null;
+      const tx = (zr ? zr.left + zr.width / 2 : gr.left + gr.width * (0.5 + side * 0.33)) - sr.left;
+      const ty = (zr ? zr.top + zr.height / 2 : gr.top + gr.height * (high ? 0.3 : 0.72)) - sr.top;
       const ball = h(`<div class="h-kickball">${ic('soccer')}</div>`);
       E.fx.appendChild(ball);
       const sx = sr.width / 2, sy = sr.height - 10;
       snd.play('tap');
-      const dive = Math.floor(Math.random() * 3) - 1;
-      const saved = dive === side && Math.random() < 0.85;
-      setTimeout(() => { placePet(spot('patio').x + dive * 22, 220); view.dir = dive < 0 ? -1 : 1; view.setAct('hop', 600); }, 180);
+      // se tira a un lado; si pateás siempre al mismo lado, te lee
+      const L = kickHist;
+      const fav = L.length >= 2 && L[L.length - 1] === L[L.length - 2] ? L[L.length - 1] : null;
+      let dive = (fav != null && Math.random() < 0.6 ? fav : Math.floor(Math.random() * 3)) - 1;
+      if (Math.random() < 0.1) dive = side;
+      L.push(col + 0); if (L.length > 4) L.shift();
+      const saved = dive === side && !(high && Math.random() < 0.35); // arriba es más difícil de atajar
+      setTimeout(() => { placePet(spot('patio').x + dive * 22, 220); view.dir = dive < 0 ? -1 : dive > 0 ? 1 : view.dir; view.setAct('hop', 600); }, 180);
       const anim2 = ball.animate([
         { transform: `translate(${sx}px, ${sy}px) translate(-50%,-50%) scale(1.25)` },
         { transform: `translate(${tx}px, ${ty}px) translate(-50%,-50%) scale(0.7)` },
@@ -638,6 +693,7 @@
       setTimeout(() => { ball.remove(); placePet(spot('patio').x, 300); kicking = false; }, 1300);
       void anim2;
     }
+    H.kick = kick;
     // Jardín: lluvia con la nube, plantar y cosechar
     let raining = false;
     function rain() {
@@ -646,6 +702,9 @@
       if (!r.ok) { if (r.msg) toast(r.msg); open('seeds')(); return; }
       raining = true;
       const c = h(`<div class="h-rain"><div class="h-cloud">${ic('cloud')}</div>${Array.from({ length: 18 }, (_, i) => `<i style="left:${(6 + i * 5).toFixed(0)}%;animation-delay:${(Math.random() * 0.5).toFixed(2)}s"></i>`).join('')}</div>`);
+      // (2.0.4) la lluvia cae justo sobre los canteros (la huerta cambia de tamaño según la pantalla)
+      const pb = E.special.querySelector('.h-plots');
+      if (pb) { const sr = E.scene.getBoundingClientRect(), r0 = pb.getBoundingClientRect(); c.style.left = ((r0.left - sr.left) / sr.width * 100).toFixed(1) + '%'; c.style.width = (r0.width / sr.width * 100).toFixed(1) + '%'; }
       E.special.appendChild(c);
       snd.play('bath');
       setTimeout(() => { c.remove(); raining = false; renderPlots(true); }, 2000);
@@ -722,6 +781,19 @@
 
     /* ---------- globito y avisos ---------- */
     let bubbleT = 0;
+    // que el globito no se salga de la pantalla (la mascota puede estar en un costado). (2.0.4) También se vuelve a
+    // acomodar cuando la mascota cambia de lugar con el globito abierto (antes quedaba cortado al cambiar de ambiente).
+    function clampBubble() {
+      if (E.bubble.hidden) return;
+      const m0 = parseFloat(E.bubble.style.marginLeft) || 0;
+      const br = E.bubble.getBoundingClientRect(), sr = E.scene.getBoundingClientRect();
+      if (!br.width || !sr.width) return;
+      const l = br.left - m0, r = br.right - m0;
+      let m = 0;
+      if (l < sr.left + 4) m = sr.left + 4 - l; else if (r > sr.right - 4) m = sr.right - 4 - r;
+      const v = Math.round(m) + 'px';
+      if (E.bubble.style.marginLeft !== v) E.bubble.style.marginLeft = v;
+    }
     H.bubble = function (text, ms, warn, action) {
       E.bubble.textContent = '';
       E.bubble.append(Object.assign(document.createElement('span'), { textContent: text }));
@@ -733,12 +805,8 @@
       }
       E.bubble.classList.toggle('warn', !!warn);
       E.bubble.hidden = false;
-      E.bubble.style.marginLeft = '0px';
       E.bubble.classList.remove('pop'); void E.bubble.offsetWidth; E.bubble.classList.add('pop');
-      // que no se salga de la pantalla (la mascota puede estar en un costado)
-      const br = E.bubble.getBoundingClientRect(), sr = E.scene.getBoundingClientRect();
-      if (br.left < sr.left + 4) E.bubble.style.marginLeft = (sr.left + 4 - br.left) + 'px';
-      else if (br.right > sr.right - 4) E.bubble.style.marginLeft = (sr.right - 4 - br.right) + 'px';
+      clampBubble();
       clearTimeout(bubbleT);
       bubbleT = setTimeout(() => { E.bubble.hidden = true; }, ms || 2000);
       const p = C.state.pet;
@@ -760,7 +828,9 @@
       const key = list.map((q) => q.id).join(',');
       if (!force && key === poopKey) return;
       poopKey = key;
-      E.poops.innerHTML = list.map((q) => `<button type="button" class="poop" data-poop="${q.id}" style="left:${(q.x * 100).toFixed(1)}%" aria-label="Limpiar caca">${art.poopSVG()}</button>`).join('');
+      // (2.0.4) en el jardín van del lado de la mascota, no encima de los canteros (tapaban los de abajo)
+      const px = (q) => (room() === 'jardin' ? 70 + q.x * 26 : q.x * 100);
+      E.poops.innerHTML = list.map((q) => `<button type="button" class="poop" data-poop="${q.id}" style="left:${px(q).toFixed(1)}%" aria-label="Limpiar caca">${art.poopSVG()}</button>`).join('');
     }
     E.poops.addEventListener('click', (e) => {
       const b = e.target.closest('[data-poop]'); if (!b) return;
@@ -809,7 +879,11 @@
     let x = 50, walk = null, walkTimer = 0, nextT = 0, placed = '';
     function placePet(xPct, ms, force) {
       const sp = spot(room());
-      const px = Math.round((xPct / 100) * sceneW);
+      // (2.0.4) que no se salga por los costados (en el jardín se cortaba la cola en el celular y en Windows)
+      const pw = parseFloat(E.petbox.style.width) || E.petbox.offsetWidth || 0;
+      let px = Math.round((xPct / 100) * sceneW);
+      const mg = pw * 0.07; // (la cola o las alas a veces salen un poco del cuadro del dibujo)
+      if (pw && sceneW > pw + 2 * mg) px = Math.max(Math.round(pw / 2 + mg), Math.min(Math.round(sceneW - pw / 2 - mg), px));
       // (upW: cuánto sube según el tamaño de la mascota; en el garaje queda sentada en el auto en cualquier pantalla)
       const dy = sp.upW ? `calc(${(-sp.up).toFixed(2)}em - var(--petw, 10em) * ${sp.upW})` : `${(-sp.up).toFixed(2)}em`;
       const v = `translate3d(${px}px, ${dy}, 0) translateX(-50%)`;
@@ -878,7 +952,7 @@
       schedule(6000);
     };
     H.onReset = () => { E.bubble.hidden = true; stopWalk(); clearFoam(); drawRoom(true); schedule(2000); };
-    if (window.ResizeObserver) new ResizeObserver(() => { const w = E.scene.clientWidth; if (w && w !== sceneW) { sceneW = w; sceneH = E.scene.clientHeight; if (walk) stopWalk(); placePet(x, 0, true); sizePet(); } else { sceneH = E.scene.clientHeight; sizePet(); } }).observe(E.scene);
+    if (window.ResizeObserver) new ResizeObserver(() => { const w = E.scene.clientWidth; if (w && w !== sceneW) { sceneW = w; sceneH = E.scene.clientHeight; setSch(); if (walk) stopWalk(); sizePet(); placePet(curX(), 0, true); } else { sceneH = E.scene.clientHeight; setSch(); sizePet(); placePet(curX(), 0, true); } }).observe(E.scene);
 
     /* ---------- actualizar (lo llama el ciclo del juego cada segundo y cuando algo cambia) ---------- */
     H.update = function () {
@@ -895,6 +969,7 @@
       if (walk && !free() && !walk.seek) stopWalk();
       if (p && (p.stage === 'egg' || p.dead) && Math.abs(curX() - 50) > 0.5 && !walk) { x = 50; placePet(50, 600); }
       if (!walk && !nextT && free()) schedule(2500);
+      if (!walk) clampBubble();
       view.tired = !!(p && !p.sleeping && p.stage !== 'egg' && p.energy < 30);
       view.render();
     };

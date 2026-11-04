@@ -834,7 +834,7 @@
     <li><b>Baño:</b> agarrá el jabón y pasáselo por encima para hacer espuma; después agarrá la ducha y pasala por encima para sacarle todo el jabón (o tocá los botones y lo hace solo).</li><li><b>Dormitorio:</b> apagá la luz para que duerma; en el armario están los accesorios.</li>
     <li><b>Living:</b> música para bailar, la tele (tocala) y el álbum de fotos.</li><li><b>Cuarto de juegos:</b> la pelota y todos los minijuegos.</li>
     <li><b>Laboratorio:</b> remedio, vitaminas y pociones.</li><li><b>Jardín:</b> plantá semillas, regá con la nube y cosechá comida.</li>
-    <li><b>Patio:</b> pateá penales: tu mascota ataja. <b>Paseo:</b> salí a pasear por los lugares que tengas. <b>Garaje:</b> manejá el auto.</li></ul>
+    <li><b>Patio:</b> tocá el arco donde quieras patear: tu mascota ataja. <b>Paseo:</b> salí a pasear por los lugares que tengas. <b>Garaje:</b> manejá el auto.</li></ul>
     <p>Tu mascota te sigue con la mirada: mové el dedo (o el mouse) cerca y fijate.</p>
     <p>Tu mascota tiene cinco necesidades que bajan con el tiempo, aunque cierres el juego: <b>comida, energía, diversión, higiene y salud</b>.</p>
     <p>Si la descuidás se enferma. Si se enferma y no le das el remedio, o pasa mucho tiempo sin comer, la salud baja. <b>Si la salud llega a cero, se muere</b> (sin ningún cuidado, tarda alrededor de una semana) y podés empezar enseguida con un huevo nuevo.</p>
