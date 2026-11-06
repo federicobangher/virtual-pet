@@ -57,6 +57,7 @@
     paseo: { name: 'Paseo', outdoor: true, place: true, floor: 'transparent', bar: '#2a5fb0', top: '#cfe6ff', title: '#effaff' },
     garaje: { name: 'Garaje', wall: '#9aa3b8', wallPat: 'garage', floor: '#6b7280', floorPat: 'concrete', bar: '#3c4252', top: '#e3e7ef', title: '#f4f6fa' },
   };
+  Object.setPrototypeOf(ROOMS, null); // (2.0.8) claves como "toString" no son ambientes válidos
 
   const win = (night) => `<rect x="4" y="4" width="92" height="82" rx="6" fill="#fff" stroke="${INK}" stroke-width="4"/><rect x="11" y="11" width="78" height="68" fill="${night ? '#24204a' : '#9ad8ff'}"/>` +
     (night ? '<circle cx="66" cy="30" r="9" fill="#fff3c4"/><circle cx="62" cy="27" r="9" fill="#24204a"/><g fill="#fff"><circle cx="24" cy="24" r="1.6"/><circle cx="40" cy="44" r="1.3"/><circle cx="74" cy="58" r="1.5"/><circle cx="30" cy="62" r="1.2"/></g>'

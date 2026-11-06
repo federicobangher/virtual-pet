@@ -3,7 +3,7 @@
   'use strict';
   const N = (window.N = window.N || {});
   const MIN = 60e3, HOUR = 3600e3, DAY = 24 * HOUR;
-  N.APP = { name: 'Virtual Pet', version: '2.0.7', author: 'Facundo Bangher' };
+  N.APP = { name: 'Virtual Pet', version: '2.0.8', author: 'Facundo Bangher' };
   /* (2.0.6) "Modo Club": la copia de Virtual Pet que va en la página del Club de Facu (elclubdefacu.com.ar/mascota/).
      Es para chicos de 2 a 12 años: la mascota NO se muere (si la descuidan se enferma y queda muy débil, y se
      recupera cuando la cuidan), no hay avisos ni "instalar" aparte, y hay un botón para volver al Club.
@@ -255,6 +255,12 @@
     shinyCare: 62,
   };
 
+  // (2.0.8, auditoría del Club) Catálogos sin prototipo: una copia de seguridad modificada a mano con
+  // species:"toString" o un item "valueOf" pasaba las validaciones (SPECIES["toString"] existe en
+  // cualquier objeto común) y después el dibujo fallaba en cada cuadro: el juego quedaba roto para siempre.
+  [SPECIES, TRAITS, BACKGROUNDS, SEEDS, ITEMS, GAMES, TOYS].forEach((o) => Object.setPrototypeOf(o, null));
+  const own = (o, k) => !!o && typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
+
   const clamp = (v) => (v < 0 ? 0 : v > 100 ? 100 : v);
   const now = () => Date.now();
 
@@ -357,7 +363,7 @@
     st.garden = { plots: plots.map((pl) => (pl && typeof pl === 'object' && SEEDS[pl.seed] ? { seed: pl.seed, grown: Math.max(0, num(pl.grown, 0)), last: num(pl.last, now()), wetUntil: num(pl.wetUntil, 0) } : null)) };
     st.coins = Math.max(0, Math.floor(num(st.coins, R.startCoins)));
     Object.keys(st.inv).forEach((k) => { if (!ITEMS[k] || ITEMS[k].kind === 'wear') { delete st.inv[k]; return; } st.inv[k] = Math.max(0, Math.floor(num(st.inv[k], 0))); });
-    if (st.wearing && !st.owned[st.wearing]) st.wearing = null;
+    if (st.wearing && (!own(st.owned, st.wearing) || !WEAR.includes(st.wearing))) st.wearing = null;
     st.lockUntil = num(st.lockUntil, 0);
     // ya no hay espera después de una muerte: una partida vieja que estaba esperando queda libre
     if (st.lockUntil > now() + R.lockout) st.lockUntil = now() + R.lockout;

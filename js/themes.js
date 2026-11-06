@@ -81,6 +81,7 @@
         `<g fill="#b3adc6"><ellipse cx="70" cy="37" rx="24" ry="6"/><ellipse cx="300" cy="96" rx="32" ry="8"/></g>`),
     },
   };
+  Object.setPrototypeOf(ART, null); // (2.0.8) claves como "toString" no son ambientes válidos
 
   // El cuarto de siempre se dibuja con CSS en la escena; esto es sólo su miniatura para la tienda.
   const ROOM_THUMB = svg('0 0 160 100', `<rect width="160" height="70" fill="#c9ebda"/>` +

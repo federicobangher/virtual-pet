@@ -92,6 +92,10 @@
       if (!initPlay()) document.addEventListener('deviceready', () => { if (!initPlay()) { B.error = 'Falta el plugin de compras'; changed(); } }, { once: true });
       return;
     }
+    // (2.0.8, auditoría del Club) En la página del Club no hay modo de prueba: con ?tienda=demo cualquiera
+    // veía "precios" falsos y conseguía monedas gratis, y la política de privacidad del Club dice
+    // que Mi mascota no tiene compras. Si había quedado prendido, se apaga.
+    if (N.club) { try { localStorage.removeItem('vpet.tienda'); } catch (e) { /* nada */ } return; }
     if (kind === 'web' && wantDemo()) initDemo();
   };
   Object.defineProperty(B, 'enabled', { get: () => B.mode !== 'none' });
