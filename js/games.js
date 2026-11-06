@@ -117,11 +117,13 @@
       if (flash > 0) { g.fillStyle = `rgba(255,80,90,${flash / 400})`; g.fillRect(0, 0, W, H); flash -= dt; }
       // objetos
       items.forEach((it) => {
-        it.y += it.vy * dt; it.rot += dt * 0.002;
+        const y0 = it.y; it.y += it.vy * dt; it.rot += dt * 0.002;
         g.save(); g.translate(it.x, it.y); g.rotate(Math.sin(it.rot) * 0.3);
         if (ready(imgs[it.kind])) g.drawImage(imgs[it.kind], -22, -22, 44, 44);
         g.restore();
-        if (it.y > H - 70 && it.y < H - 40 && Math.abs(it.x - basket) < 44 && !it.done) {
+        // (2.0.7) se mira el tramo que recorrió en este cuadro: en un celular lento (cuadros de 50 ms) y con el campo alto,
+        // la comida bajaba más de 30 px por cuadro y podía atravesar la canasta sin contar
+        if (it.y > H - 70 && y0 < H - 40 && Math.abs(it.x - basket) < 44 && !it.done) {
           it.done = true;
           if (it.kind === 'rock') { score = Math.max(0, score - 2); flash = 400; snd.play('bad'); }
           else { score += it.kind === 'fav' ? 2 : 1; snd.play('good'); }
@@ -349,21 +351,28 @@
       <div class="g-stage"><canvas class="g-canvas g-jump" aria-label="Juego: saltá las piedras"></canvas></div>
       <p class="g-hint">Tocá o hacé clic (o la barra espaciadora) para saltar cuando se acerque una piedra.</p></div>`;
     const cv = root.querySelector('canvas'), g = cv.getContext('2d');
-    const { W, H } = fitCanvas(cv, root), DUR = 25000, MAX = 12, GY = H - 70; // salen ~15 piedras: 12 ya es puntaje perfecto
+    // (2.0.7) campo no tan alto: en el celular parado era casi todo cielo vacío y la mascota quedaba chiquita abajo
+    const { W, H } = fitCanvas(cv, root, { maxH: 540 }), DUR = 25000, MAX = 12, GY = H - 70; // salen ~15 piedras: 12 ya es puntaje perfecto
     const showSc = show(root.querySelector('.sc')), showTm = show(root.querySelector('.tm')), showLv = show(root.querySelector('.lv'));
     const petImg = imgFromSVG(art.petSVG({ species: p ? p.species : 'dragon', stage: p && p.stage !== 'egg' ? p.stage : 'baby', variant: p ? p.variant : 'normal', mood: 'happy', dir: 1, accessory: S0.wearing, walking: true }).replace('<svg ', '<svg width="240" height="200" '), 132, 110);
-    const rockImg = imgFromSVG('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 40"><path d="M4 38c-2-10 6-24 18-26 11-2 22 6 22 16 0 8-6 10-18 10z" fill="#8d8a9c" stroke="#5f5c70" stroke-width="2.5"/><path d="M14 24c3-3 7-4 10-3" stroke="#b9b6c7" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>', 48, 40);
+    const rockImg = imgFromSVG('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 40" width="96" height="80"><path d="M4 38c-2-10 6-24 18-26 11-2 22 6 22 16 0 8-6 10-18 10z" fill="#8d8a9c" stroke="#5f5c70" stroke-width="2.5"/><path d="M14 24c3-3 7-4 10-3" stroke="#b9b6c7" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>', 48, 40);
     bgOf(cv, 'linear-gradient(#bfe8ff, #fff3d6)');
+    // (2.0.7) nubes que pasan despacio, para que el cielo no quede vacío (una sola imagen, dibujada 3 veces)
+    const cloudImg = imgFromSVG('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60" width="240" height="120"><path d="M22 52a16 16 0 0 1 2-32 22 22 0 0 1 40-8 18 18 0 0 1 32 10 15 15 0 0 1 2 30z" fill="#fff" opacity=".9"/></svg>', 120, 60);
+    const clouds = [0, 1, 2].map((i) => ({ x: (i * W) / 2.6 + 30, y: 30 + ((i * 53) % Math.max(60, GY - 280)), k: 0.7 + (i % 2) * 0.35 }));
     // La mascota se dibuja en un cuadro de 132×110 pero el cuerpo ocupa el centro: el choque usa sólo el cuerpo
     const PW = 132, PH = 110, PX = 30, BX0 = PX + PW * 0.36, BX1 = PX + PW * 0.66;
     const V0 = -1.05, GRAV = 0.0025, AIR = 2 * -V0 / GRAV; // ~0,84 s en el aire y ~220 px de alto: da tiempo de sobra para pasar una piedra
-    let pairNext = false, y = 0, vy = 0, rocks = [], spawn = 1400, score = 0, lives = 3, hurt = 0, played = 0, last = performance.now(), running = true, raf = 0, scroll = 0, queued = -1;
+    let pairNext = false, y = 0, vy = 0, rocks = [], spawn = 250, score = 0, lives = 3, hurt = 0, played = 0, last = performance.now(), running = true, raf = 0, scroll = 0, queued = -1;
     let sp = 0.2;
     const st = { get y() { return y; }, get rocks() { return rocks; }, get score() { return score; }, get lives() { return lives; }, get sp() { return sp; }, get petOk() { return ready(petImg); }, BX0, BX1, W, H };
     // Si toca un poquito antes de caer, salta apenas toca el piso (antes el toque se perdía)
     const jump = () => { if (!running) return; if (y >= -1) { vy = V0; y = -0.01; queued = -1; snd.play('tap'); } else queued = played; };
-    cv.addEventListener('pointerdown', (e) => { e.preventDefault(); jump(); });
-    const onKey = (e) => { if (e.code === 'Space' || e.key === ' ' || e.key === 'ArrowUp') { e.preventDefault(); if (!e.repeat) jump(); } };
+    // (2.0.7) se salta tocando cualquier parte del área de juego (antes sólo el lienzo)
+    const stageEl = root.querySelector('.g-stage');
+    stageEl.addEventListener('pointerdown', (e) => { if (e.button > 0) return; e.preventDefault(); jump(); });
+    stageEl.style.touchAction = 'none';
+    const onKey = (e) => { if (e.code === 'Space' || e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') { e.preventDefault(); if (!e.repeat) jump(); } };
     window.addEventListener('keydown', onKey);
     cv.style.touchAction = 'none';
     function frame(now) {
@@ -395,6 +404,7 @@
       scroll = (scroll + sp * dt) % 40;
       // dibujo
       g.clearRect(0, 0, W, H);
+      if (ready(cloudImg)) for (const c of clouds) { c.x -= sp * dt * 0.18 * c.k; if (c.x < -130) c.x = W + 20; g.drawImage(cloudImg, c.x, c.y, 120 * c.k, 60 * c.k); }
       g.fillStyle = '#9fd67a'; g.fillRect(0, GY, W, H - GY);
       g.fillStyle = '#7cbf5a'; for (let x = -scroll; x < W; x += 40) g.fillRect(x, GY + 8, 20, 4);
       if (ready(rockImg)) for (const r of rocks) g.drawImage(rockImg, r.x, GY - r.h + 4, r.w, r.h);
@@ -519,48 +529,73 @@
     return { stop() { alive = false; timers.forEach(clearTimeout); } };
   }
 
-  /* ---------- Topos: tocá los topos, no a tu mascota ---------- */
+  /* ---------- Topos: tocá los topos, no a tu mascota ----------
+     (2.0.7) Antes el que asomaba quedaba DETRÁS del pozo (se veía sólo la punta de la cabeza), al bajar se veía
+     por debajo del pozo, y el "topo" era el hámster de los emojis. Ahora cada pozo tiene un recorte (.clip) con
+     la forma del pozo: el topo (dibujado) o la mascota salen de adentro y no se ven cuando están escondidos.
+     También se arregló que un topo nuevo que salía justo en el pozo recién tocado quedaba invisible. */
+  const MOLE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" aria-hidden="true">'
+    + '<path d="M12 104C10 52 26 18 50 18s40 34 38 86z" fill="#8a5a3c" stroke="#2b1d1f" stroke-width="4" stroke-linejoin="round"/>'
+    + '<path d="M44 20c1-8 5-12 9-13M52 19c3-6 8-8 12-8" stroke="#2b1d1f" stroke-width="3.5" fill="none" stroke-linecap="round"/>'
+    + '<path d="M28 104c0-22 10-34 22-34s22 12 22 34z" fill="#c99a72"/>'
+    + '<circle cx="37" cy="44" r="5.2" fill="#2b1d1f"/><circle cx="63" cy="44" r="5.2" fill="#2b1d1f"/><circle cx="38.8" cy="42.2" r="1.8" fill="#fff"/><circle cx="64.8" cy="42.2" r="1.8" fill="#fff"/>'
+    + '<ellipse cx="27" cy="55" rx="6" ry="3.6" fill="#ff9fb2" opacity=".75"/><ellipse cx="73" cy="55" rx="6" ry="3.6" fill="#ff9fb2" opacity=".75"/>'
+    + '<ellipse cx="50" cy="56" rx="11" ry="8" fill="#ff7f9c" stroke="#2b1d1f" stroke-width="3.5"/><ellipse cx="46.5" cy="54" rx="3" ry="2" fill="#fff" opacity=".6"/>'
+    + '<path d="M44 66q6 5 12 0" stroke="#2b1d1f" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M47 67.5v4h6v-4" fill="#fff" stroke="#2b1d1f" stroke-width="2"/>'
+    + '<g fill="#ffc7d2" stroke="#2b1d1f" stroke-width="3.2" stroke-linejoin="round"><path d="M14 88c-2-9 4-14 12-13 7 1 9 8 7 14z"/><path d="M86 88c2-9-4-14-12-13-7 1-9 8-7 14z"/></g>'
+    + '<g stroke="#2b1d1f" stroke-width="2.4" stroke-linecap="round"><path d="M19 80v6M24 79v7M29 80v6M81 80v6M76 79v7M71 80v6"/></g></svg>';
   function toposGame(root, finish) {
     const DUR = 25000, MAX = 20;
     root.innerHTML = `<div class="g-wrap g-topos"><div class="g-top"><span>Topos <b class="sc">0</b></span><span>Tiempo <b class="tm">25</b></span></div>
-      <div class="g-stage"><div class="holes">${Array.from({ length: 9 }, (_, i) => `<button type="button" class="hole" data-i="${i}" aria-label="Pozo ${i + 1}"><span class="who"></span><span class="dirt"></span></button>`).join('')}</div></div>
+      <div class="g-stage"><div class="holes">${Array.from({ length: 9 }, (_, i) => `<button type="button" class="hole" data-i="${i}" aria-label="Pozo ${i + 1}"><span class="pit"></span><span class="clip"><span class="who"></span></span><span class="lip"></span><span class="pts"></span></button>`).join('')}</div></div>
       <p class="g-hint">Tocá a los topos cuando asoman. Si tocás a tu mascota, perdés 2.</p></div>`;
     const holes = [...root.querySelectorAll('.hole')];
     const holesEl = root.querySelector('.holes');
     onStage(root, (w, h) => { holesEl.style.width = Math.floor(Math.min(w, h, 760)) + 'px'; });
     const petSvg = art.petSVG(Object.assign(petOf(), { mood: 'happy', dir: 1 }));
-    let score = 0, alive = true, t0 = Date.now(), played = 0, last = Date.now(); const timers = [], up = {};
+    let score = 0, alive = true, played = 0, last = Date.now(), token = 0; const timers = [], up = {}, busy = {};
     const showSc = show(root.querySelector('.sc')), showTm = show(root.querySelector('.tm'));
+    // un pozo que se acaba de vaciar espera a que termine de bajar antes de recibir a otro
+    const rest = (i, ms) => { busy[i] = ++token; const k = token; later(timers, () => { if (busy[i] === k) delete busy[i]; }, ms); };
+    function hide(i, ms) { holes[i].classList.remove('up'); later(timers, () => { if (!up[i]) holes[i].classList.remove('hit'); }, ms); rest(i, ms + 60); }
     function pop() {
       if (!alive) return;
-      const free = holes.map((_, i) => i).filter((i) => !up[i]);
+      const free = holes.map((_, i) => i).filter((i) => !up[i] && !busy[i]);
       if (free.length) {
         const i = free[Math.floor(Math.random() * free.length)], isPet = Math.random() < 0.2;
-        up[i] = isPet ? 'pet' : 'mole';
+        const me = ++token;
+        up[i] = { kind: isPet ? 'pet' : 'mole', me };
         const w = holes[i].querySelector('.who');
-        w.innerHTML = isPet ? petSvg : `<span class="mole">${art.emojiSVG('🐹')}</span>`;
+        w.innerHTML = isPet ? petSvg : MOLE_SVG;
+        w.classList.toggle('is-pet', isPet);
+        holes[i].classList.remove('hit');
+        void w.offsetWidth; // que la subida se anime aunque el pozo se haya usado recién
         holes[i].classList.add('up');
-        const stay = Math.max(520, 1100 - played / 40);
-        later(timers, () => { if (up[i]) { delete up[i]; holes[i].classList.remove('up', 'hit'); } }, stay);
+        const stay = Math.max(560, 1150 - played / 40);
+        later(timers, () => { if (up[i] && up[i].me === me) { delete up[i]; hide(i, 160); } }, stay);
       }
       later(timers, pop, Math.max(330, 700 - played / 60) * (0.7 + Math.random() * 0.6));
     }
-    root.querySelector('.holes').addEventListener('pointerdown', (e) => {
+    holesEl.addEventListener('pointerdown', (e) => {
       const b = e.target.closest('.hole'); if (!b || !alive) return;
+      e.preventDefault();
       const i = +b.dataset.i, w = up[i]; if (!w) return;
-      delete up[i]; b.classList.add('hit');
-      if (w === 'pet') { score = Math.max(0, score - 2); snd.play('bad'); } else { score++; snd.play('good'); }
+      delete up[i]; b.classList.add('hit'); rest(i, 480);
+      const pts = b.querySelector('.pts');
+      if (w.kind === 'pet') { score = Math.max(0, score - 2); snd.play('bad'); pts.textContent = '−2'; pts.className = 'pts bad'; }
+      else { score++; snd.play('good'); pts.textContent = '+1'; pts.className = 'pts'; }
+      void pts.offsetWidth; pts.classList.add('show');
       showSc(score);
-      later(timers, () => b.classList.remove('up', 'hit'), 180);
+      later(timers, () => hide(i, 160), 200);
     });
     const tick = setInterval(() => {
       const n = Date.now(), raw = n - last; last = n; played += Math.min(250, raw);
       showTm(Math.max(0, Math.ceil((DUR - played) / 1000)));
       if (played >= DUR) { alive = false; clearInterval(tick); timers.forEach(clearTimeout); finish(Math.min(score, MAX), MAX); }
     }, 100);
-    later(timers, pop, 500);
-    root._game = { get up() { return up; } };
-    void t0;
+    later(timers, pop, 400);
+    // para las pruebas automáticas: { pozo: 'mole' | 'pet' }
+    root._game = { get up() { const o = {}; Object.keys(up).forEach((k) => { o[k] = up[k].kind; }); return o; }, get score() { return score; } };
     return { stop() { alive = false; clearInterval(tick); timers.forEach(clearTimeout); } };
   }
 
@@ -583,7 +618,8 @@
     let cur = 0, score = 0, lives = 3, cam = 0, jump = null, splash = 0, running = true, raf = 0, last = performance.now(), wob = 0;
     const lane = (k) => H - 70 - (k * ROW) + cam;
     const doJump = () => { if (!running || jump || splash > 0) return; jump = { t: 0, from: rows[cur].x }; snd.play('tap'); };
-    cv.addEventListener('pointerdown', (e) => { e.preventDefault(); doJump(); });
+    root.querySelector('.g-stage').addEventListener('pointerdown', (e) => { if (e.button > 0) return; e.preventDefault(); doJump(); }); // (2.0.7) en toda el área de juego
+    root.querySelector('.g-stage').style.touchAction = 'none';
     const onKey = (e) => { if (e.code === 'Space' || e.key === ' ' || e.key === 'ArrowUp') { e.preventDefault(); if (!e.repeat) doJump(); } };
     window.addEventListener('keydown', onKey);
     cv.style.touchAction = 'none';

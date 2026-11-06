@@ -3,7 +3,7 @@
   'use strict';
   const N = (window.N = window.N || {});
   const MIN = 60e3, HOUR = 3600e3, DAY = 24 * HOUR;
-  N.APP = { name: 'Virtual Pet', version: '2.0.6', author: 'Facundo Bangher' };
+  N.APP = { name: 'Virtual Pet', version: '2.0.7', author: 'Facundo Bangher' };
   /* (2.0.6) "Modo Club": la copia de Virtual Pet que va en la página del Club de Facu (elclubdefacu.com.ar/mascota/).
      Es para chicos de 2 a 12 años: la mascota NO se muere (si la descuidan se enferma y queda muy débil, y se
      recupera cuando la cuidan), no hay avisos ni "instalar" aparte, y hay un botón para volver al Club.
@@ -239,7 +239,8 @@
     lvYoung: 5, lvAdult: 20, maxLevel: 100,
     minAgeYoung: 2 * HOUR, minAgeAdult: 24 * HOUR,
     xpPerHourCared: 5,
-    // (despierta: la comida pide a las ~4 h, la diversión a las ~5 h, la higiene a las ~7 h y el sueño a las ~8 h;
+    // (despierta, desde la 2.0.7 que pide debajo de 50 %: la comida pide a las ~3-4 h, la diversión a las ~3-5 h,
+    //  la higiene a las ~6 h y el sueño a las ~5-7 h (tools/balance.js);
     //  de noche se cansa antes y duerme toda la noche)
     awake: { food: 13, fun: 12, hygiene: 8, energy: 8 },
     // durmiendo recupera la energía en 2 a 3 horas (de noche igual sigue durmiendo hasta la mañana)
@@ -428,15 +429,16 @@
     return 'normal';
   }
 
-  /* Pedidos de la mascota. level 1 = lo pide; level 2 = lo pide con urgencia. */
+  /* Pedidos de la mascota. level 1 = lo pide; level 2 = lo pide con urgencia.
+     (2.0.7, pedido) Igual para todas: arriba de 50 % no pide nada; de 50 % a 15 % lo pide (amarillo); debajo de 15 %, urgente (rojo). */
   const ASKS = {
     sick: { urgent: ['Me siento mal… ¿me das el remedio?', 'Estoy enfermito… necesito un remedio'] },
-    food: { ask: 45, urgentAt: 20, a: ['Me está dando hambre…', '¿Me das algo de comer?', 'Mmm… ¿qué hay para comer?'], u: ['¡Tengo mucha hambre!', '¡Comida, por favor! ¡Me muero de hambre!'] },
-    energy: { ask: 35, urgentAt: 15, a: ['Estoy cansado… ¿me hacés dormir?', 'Uaaah… tengo sueño', '¿Apagamos la luz un rato?'], u: ['¡Me caigo de sueño!', 'No doy más… necesito dormir'] },
+    food: { ask: 50, urgentAt: 15, a: ['Me está dando hambre…', '¿Me das algo de comer?', 'Mmm… ¿qué hay para comer?'], u: ['¡Tengo mucha hambre!', '¡Comida, por favor! ¡Me muero de hambre!'] },
+    energy: { ask: 50, urgentAt: 15, a: ['Estoy cansado… ¿me hacés dormir?', 'Uaaah… tengo sueño', '¿Apagamos la luz un rato?'], u: ['¡Me caigo de sueño!', 'No doy más… necesito dormir'] },
     poop: {},
-    hygiene: { ask: 45, urgentAt: 20, a: ['Me siento sucio… ¿me bañás?', '¿Me das un baño?'], u: ['¡Necesito un baño ya!', '¡Qué olor! Bañame, por favor'] },
-    fun: { ask: 40, urgentAt: 18, a: ['¿Jugamos un rato?', 'Me aburro… ¿jugamos?', '¡Quiero jugar!'], u: ['¡Estoy re aburrido!', 'Nadie juega conmigo…'] },
-    health: { ask: 40, urgentAt: 20, a: ['Estoy un poco débil… ¿unas vitaminas?'], u: ['Estoy muy débil…'] },
+    hygiene: { ask: 50, urgentAt: 15, a: ['Me siento sucio… ¿me bañás?', '¿Me das un baño?'], u: ['¡Necesito un baño ya!', '¡Qué olor! Bañame, por favor'] },
+    fun: { ask: 50, urgentAt: 15, a: ['¿Jugamos un rato?', 'Me aburro… ¿jugamos?', '¡Quiero jugar!'], u: ['¡Estoy re aburrido!', 'Nadie juega conmigo…'] },
+    health: { ask: 50, urgentAt: 15, a: ['Estoy un poco débil… ¿unas vitaminas?'], u: ['Estoy muy débil…'] },
   };
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
   function needs(p) {
@@ -446,7 +448,7 @@
     if (p.sleeping) return out; // durmiendo no pide nada (salvo si está enfermo)
     const lv = (id, v) => { const a = ASKS[id]; if (v < a.urgentAt) out.push({ id, level: 2, text: pick(a.u) }); else if (v < a.ask) out.push({ id, level: 1, text: pick(a.a) }); };
     lv('food', p.food);
-    if (isNight(now()) && p.energy >= ASKS.energy.urgentAt && p.energy < 75) out.push({ id: 'energy', level: 1, text: pick(['Ya es de noche… ¿me hacés dormir?', 'Uaaah… es tarde, tengo sueño', 'Está oscuro… ¿vamos a dormir?']) });
+    if (isNight(now()) && p.energy >= ASKS.energy.urgentAt && p.energy < ASKS.energy.ask) out.push({ id: 'energy', level: 1, text: pick(['Ya es de noche… ¿me hacés dormir?', 'Uaaah… es tarde, tengo sueño', 'Está oscuro… ¿vamos a dormir?']) });
     else lv('energy', p.energy);
     if (p.poops.length >= 2) out.push({ id: 'poop', level: 2, text: '¡Hay mucha caca! Limpiá, por favor' });
     else if (p.poops.length === 1) out.push({ id: 'poop', level: 1, text: 'Hice caca… ¿la limpiás?' });

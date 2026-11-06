@@ -13,6 +13,9 @@
   const TAG = 26;   // espacio abajo para el nombre
   const MINW = 290; // ancho mínimo de la ventana compacta (para que entre el globito)
   const CARD_W = 392;
+  // (2.0.7) jugando, el panel se ensancha (hasta 200 px más, si el monitor tiene lugar): los juegos quedaban chiquitos
+  let gameExtra = 0;
+  const gameExtraFor = (a) => Math.max(0, Math.min(200, Math.floor(((a && a.width) || 1024) - CARD_W - 48)));
   // Alto máximo del panel. Antes ocupaba casi toda la pantalla (alto del monitor − 16 px): en Windows, con
   // escalas distintas o la barra de tareas arriba, la parte de arriba (con la X y la flecha de volver)
   // podía quedar fuera de la pantalla y no había forma de cerrarlo.
@@ -111,7 +114,7 @@
   /* ---------- ventana: tamaño y posición ---------- */
   function cardSize() {
     const r = E.card.getBoundingClientRect();
-    return { w: CARD_W, h: Math.min(r.height || 460, cardMaxH()) };
+    return { w: CARD_W + (E.card.classList.contains('gaming') ? gameExtra : 0), h: Math.min(r.height || 460, cardMaxH()) };
   }
   function placeCardAuto() {
     if (cardA !== wa) { cardA = wa; applyCardMax(); }
@@ -408,7 +411,7 @@
     // (2.0.3) si llevaste el panel a otro monitor, la mascota sale de la casa en ese monitor (abajo del panel)
     if (cardPos && cardA && !inside(cardA, pos.x + size.w / 2, pos.y + size.h / 2)) {
       const p = C.state.pet;
-      const c = clampPt(cardPos.x + CARD_W / 2 - size.w / 2, floorOf(cardA));
+      const c = clampPt(cardPos.x + cardSize().w / 2 - size.w / 2, floorOf(cardA));
       pos.x = c.x; pos.y = c.y; wa = areaOfPet(pos.x, pos.y);
       mode = p && p.stage === 'egg' ? 'fall' : 'free'; target = null; idleUntil = performance.now() + 3000; pos.vy = 0;
       savePref();
@@ -467,6 +470,7 @@
     E.sheetTitle.textContent = title;
     E.sheetBody.replaceChildren(node);
     E.panel.hidden = true; E.sheet.hidden = false;
+    if (sheetOpts.game) { gameExtra = gameExtraFor(cardA || wa); E.card.style.setProperty('--game-extra', gameExtra + 'px'); }
     E.card.classList.toggle('gaming', !!sheetOpts.game);
     E.card.querySelector('.dcard-body').scrollTop = 0; // cada hoja empieza arriba (antes heredaba lo deslizado del panel y el título tapaba el puntaje del juego)
     relayoutCard();

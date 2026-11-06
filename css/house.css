@@ -325,11 +325,20 @@ body.mode-desktop .flask-prop .bubbles circle { animation: none; }
 .ttt button.mx { color: #e8394a; } .ttt button.mo { color: #2a6fd0; }
 .ttt button:disabled { cursor: default; }
 .holes { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; width: min(20rem, 84vw); margin: 0 auto; padding: .6rem; border: 2px solid var(--ink); border-radius: 1rem; background: #6cc04a; }
-.hole { position: relative; aspect-ratio: 1; padding: 0; border: 0; background: none; overflow: hidden; touch-action: manipulation; }
-.hole .dirt { position: absolute; left: 6%; right: 6%; bottom: 4%; height: 34%; border-radius: 50%; background: radial-gradient(#3d2410 40%, #6b4428 70%); border: 2px solid var(--ink); z-index: 2; }
-.hole .who { position: absolute; left: 8%; right: 8%; bottom: 12%; height: 86%; transform: translateY(80%); transition: transform .14s ease-out; z-index: 1; display: grid; place-items: end center; }
-.hole .who svg { width: 100%; height: auto; display: block; }
-.hole .mole { width: 82%; display: block; }
+/* (2.0.7) El que asoma sale DE ADENTRO del pozo: .clip tiene la forma del pozo (rectángulo arriba y la curva de
+   adelante del pozo abajo), así escondido no se ve nada y al subir no queda detrás de la tierra. */
+.hole { position: relative; aspect-ratio: 1; padding: 0; border: 0; background: none; overflow: hidden; touch-action: manipulation; -webkit-tap-highlight-color: transparent; cursor: pointer; }
+.hole .pit { position: absolute; left: 6%; right: 6%; bottom: 8%; height: 30%; border-radius: 50%; background: radial-gradient(ellipse at 50% 40%, #241205 30%, #4a2c16 62%, #6b4428 82%); border: 2px solid var(--ink); z-index: 0; }
+.hole .clip { position: absolute; left: 6%; right: 6%; top: 0; bottom: 8%; overflow: hidden; border-radius: 0 0 50% 50% / 0 0 16.3% 16.3%; z-index: 1; pointer-events: none; }
+.hole .who { position: absolute; left: 8%; right: 8%; bottom: 4%; height: 92%; display: flex; align-items: flex-end; justify-content: center; transform: translateY(115%); transition: transform .14s ease-out; }
+.hole .who svg { width: 100%; height: auto; max-height: 100%; display: block; }
+.hole .who.is-pet { bottom: -20%; height: 112%; }
+.hole .who.is-pet svg { width: 150%; max-height: none; flex: none; transform: translateX(9%); } /* el cuerpo está a la derecha del dibujo (la cola va a la izquierda) */
 .hole.up .who { transform: translateY(0); }
-.hole.hit .who { transform: translateY(30%) scale(.9); filter: brightness(1.3); }
+.hole.up.hit .who { transform: translateY(42%) scale(.92); filter: brightness(1.3); }
+.hole .lip { position: absolute; left: 4%; right: 4%; bottom: 5%; height: 33%; border-radius: 50%; border: solid var(--ink); border-width: 0 2px .22em; background: none; box-shadow: inset 0 -.32em 0 #8c5a34; clip-path: inset(52% -2px -2px -2px); z-index: 2; pointer-events: none; }
+.hole .pts { position: absolute; left: 0; right: 0; top: 4%; font-weight: 900; font-size: 1.3em; color: #fff; -webkit-text-stroke: 1.5px var(--ink); paint-order: stroke; opacity: 0; z-index: 3; pointer-events: none; }
+.hole .pts.bad { color: #ff5c7a; }
+.hole .pts.show { animation: pts-up .6s ease-out forwards; }
+@keyframes pts-up { 0% { opacity: 0; transform: translateY(40%) scale(.8); } 25% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-50%); } }
 .dcard .gol-field, .dcard .holes { width: min(100%, calc(var(--card-maxh, 600px) - 18rem)); }

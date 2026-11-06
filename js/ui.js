@@ -472,7 +472,7 @@
       const asks = r.asksIn != null ? ` Va a pedir en <b>${C.dur(r.asksIn)}</b>.` : '';
       const act = NEED_ACTIONS[m.k === 'health' ? (r.sick ? 'sick' : 'health') : m.k];
       const showBtn = act && !a.sleeping && (r.status !== 'ok' || r.missing >= 20 || (m.k === 'health' && r.sick)) && !(m.k === 'health' && !r.sick && r.v >= 60) && !(m.k === 'energy' && r.v >= 60);
-      return `<section class="st-row m-${m.k}${focus === m.k ? ' focus' : ''}" data-k="${m.k}"><div class="st-head"><span class="mi">${ic(m.icon)}</span><b class="st-name">${m.label}</b>${chip(r.status)}<b class="st-big">${r.v}%</b></div>
+      return `<section class="st-row m-${m.k}${focus === m.k ? ' focus' : ''}" data-k="${m.k}" data-lvl="${r.status === 'urgent' ? 'low' : r.status === 'ask' ? 'mid' : 'ok'}"><div class="st-head"><span class="mi">${ic(m.icon)}</span><b class="st-name">${m.label}</b>${chip(r.status)}<b class="st-big">${r.v}%</b></div>
         <span class="bar"><i style="transform:translateX(${r.v - 100}%)"></i></span>
         <p class="st-line">${when}${asks}</p><p class="st-todo">${esc(r.todo)}</p><p class="st-xpline">${ic('star')} ${esc(r.xpText)}</p>
         ${showBtn ? `<button type="button" class="btn small" data-need="${r.sick && m.k === 'health' ? 'sick' : m.k}">${ic(act.icon)} ${act.label}</button>` : ''}</section>`;
@@ -830,7 +830,7 @@
   // Ahorro de batería: a mano, o solo cuando el celular tiene poca batería
   function saverOn() { const S = C.state; return !!(S && (S.settings.saver || (N.platform && N.platform.lowBattery))); }
   function ageOf(ms) { return C.ageText({ age: ms || 0 }); }
-  const HELP = `<p><b>La casa:</b> arriba están tus monedas, las cinco necesidades (se llenan de verde a rojo; tocalas para ver qué hacer) y el nivel. Con las flechas al lado del nombre (o deslizando el dedo) pasás de un ambiente a otro; tocando el nombre los ves todos. Abajo hay tres botones que cambian en cada ambiente.</p>
+  const HELP = `<p><b>La casa:</b> arriba están tus monedas, las cinco necesidades (verdes están bien; debajo de 50 % se ponen amarillas y la mascota lo pide; debajo de 15 %, rojas y es urgente; tocalas para ver qué hacer) y el nivel. Con las flechas al lado del nombre (o deslizando el dedo) pasás de un ambiente a otro; tocando el nombre los ves todos. Abajo hay tres botones que cambian en cada ambiente.</p>
     <ul class="help-rooms"><li><b>Cocina:</b> elegí la comida con las flechas y tocala o arrastrala hasta la boca. En la heladera está todo lo que tenés.</li>
     <li><b>Baño:</b> agarrá el jabón y pasáselo por encima para hacer espuma; después agarrá la ducha y pasala por encima para sacarle todo el jabón (o tocá los botones y lo hace solo).</li><li><b>Dormitorio:</b> apagá la luz para que duerma; en el armario están los accesorios.</li>
     <li><b>Living:</b> música para bailar, la tele (tocala) y el álbum de fotos.</li><li><b>Cuarto de juegos:</b> la pelota y todos los minijuegos.</li>
@@ -855,8 +855,11 @@
     const r = C.act.canPlay();
     if (!r.ok) { say(r.msg, true); closeSheet(); return; }
     const node = h('<div class="game-host"></div>');
-    let game = null;
+    let game = null, over = false;
+    // (2.0.7) un juego que termina con demora (Memoria, Pileta) no da el premio si ya cerraste la hoja, y nunca dos veces
     const finish = (score, max) => {
+      if (over || !node.isConnected) return;
+      over = true;
       const res = C.act.gameResult(score, max);
       if (!res.ok) { closeSheet(); return; }
       const ok = score / max >= 0.5;
@@ -868,7 +871,7 @@
       node.querySelector('[data-close]').onclick = () => closeSheet();
     };
     if (gameLocked(id) || !N.games[id]) { closeSheet(); return; }
-    showSheet('game', (C.GAMES[id] || {}).name || 'Jugar', node, { live: false, onClose: () => { game && game.stop(); } }, true);
+    showSheet('game', (C.GAMES[id] || {}).name || 'Jugar', node, { live: false, onClose: () => { over = true; game && game.stop(); } }, true);
     game = N.games[id](node, finish);
   }
 

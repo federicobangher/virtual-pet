@@ -870,7 +870,7 @@
         const fill = b.querySelector('.h-fill');
         const tf = `translateY(${100 - v}%)`;
         if (fill.style.transform !== tf) fill.style.transform = tf;
-        const lvl = v < 25 ? 'low' : v < 50 ? 'mid' : 'ok';
+        const lvl = v < 15 ? 'low' : v < 50 ? 'mid' : 'ok'; // (2.0.7) verde arriba de 50 %, amarillo de 50 % a 15 %, rojo debajo de 15 %
         if (b.dataset.lvl !== lvl) { b.dataset.lvl = lvl; if (lvl === 'low') { b.classList.remove('ping'); void b.offsetWidth; b.classList.add('ping'); } }
         const ti = live ? `${STATS.find((s) => s.k === k).label}: ${v}% — tocá para ver qué hacer` : '';
         if (b.title !== ti) b.title = ti;

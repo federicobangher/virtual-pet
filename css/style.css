@@ -668,6 +668,9 @@ button.meter:focus-visible { outline: 2px solid var(--plum); outline-offset: 1px
 .status .st-chip.ok { background: #c8f2d4; }
 .status .st-chip.ask { background: var(--yolk); }
 .status .st-chip.urgent { background: var(--berry); color: #fff; }
+/* (2.0.7) la barra también: amarilla cuando lo pide (50 % a 15 %) y roja cuando es urgente (menos de 15 %) */
+.status .st-row[data-lvl="mid"] .bar i { background-color: #ffbf1f; }
+.status .st-row[data-lvl="low"] .bar i { background-color: #ef3f57; }
 .status .bar { height: 0.75rem; }
 .status .st-level .bar.xp i { background: linear-gradient(90deg, var(--plum), #9b7bff); }
 .status p { margin: 0; font-size: .86rem; line-height: 1.35; }
@@ -741,6 +744,7 @@ button.meter:focus-visible { outline: 2px solid var(--plum); outline-offset: 1px
   .sheet-wrap.game .g-hint { display: none; }
 }
 /* Windows: el juego ocupa toda la tarjeta */
+.dcard.gaming { width: calc(22.5rem + var(--game-extra, 0px)); } /* (2.0.7) más ancho para jugar */
 .dcard.gaming .dcard-body { overflow: hidden; }
 .dcard.gaming .game-host { height: calc(var(--card-maxh, 600px) - 12rem); min-height: 18rem; }
 .dcard.gaming .g-top { font-size: .9rem; }
